@@ -1,10 +1,9 @@
-from __future__ import annotations
 
+from __future__ import annotations
 import re
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
-
 import pandas as pd
 import plotly.express as px
 from shiny import App, reactive, render, ui
@@ -13,9 +12,12 @@ from shinywidgets import output_widget, render_widget
 BASE_DIR = Path(__file__).resolve().parent
 ALL_BUS_CSV = BASE_DIR / "MTA_Bus_Speeds__Beginning_2015_20260309.csv"
 CBD_BUS_CSV = BASE_DIR / "MTA_Central_Business_District_Bus_Speeds__Beginning_2023_20260309.csv"
+TRAFFIC_CSV = BASE_DIR / "Daily_Traffic_on_MTA_Bridges_&_Tunnels_20260406.csv"
 
 DEFAULT_CUTOFF_DATE = date(2025, 1, 5)
 DEFAULT_WINDOW_MONTHS = 3
+DEFAULT_TRAFFIC_START_DATE = date(2024, 1, 1)
+DEFAULT_TRAFFIC_END_DATE = date(2025, 3, 31)
 LOCAL_TRIP_TYPE = "LCL/LTD"
 EXPRESS_ROUTE_TYPE = "express"
 LOCAL_ROUTE_TYPE = "local"
@@ -31,6 +33,11 @@ BOROUGH_CHOICES = {
     "Manhattan": "Manhattan",
     "Queens": "Queens",
     "Staten Island": "Staten Island",
+}
+TRAFFIC_DIRECTION_CHOICES = {
+    "I": "Inbound",
+    "O": "Outbound",
+    "All": "Both directions",
 }
 
 
@@ -483,6 +490,374 @@ def filter_context_sentence(
         f"Route: {route_query if route_query else 'All routes'}",
     ]
     return " | ".join(parts)
+
+
+def empty_volume_df(extra_cols: list[str] | None = None) -> pd.DataFrame:
+    base = {
+        "month": pd.Series(dtype="datetime64[ns]"),
+        "avg_daily_traffic": pd.Series(dtype="float64"),
+        "total_traffic": pd.Series(dtype="float64"),
+        "days_observed": pd.Series(dtype="int64"),
+    }
+    if extra_cols:
+        for col in extra_cols:
+            base[col] = pd.Series(dtype="object")
+    return pd.DataFrame(base)
+
+
+def build_empty_traffic_figure(title: str, message: str):
+    fig = px.line(template="plotly_white")
+    fig.update_layout(
+        title=title,
+        xaxis_title="",
+        yaxis_title="Vehicles per day",
+        margin=dict(l=20, r=20, t=70, b=20),
+        height=360,
+    )
+    fig.add_annotation(
+        text=message,
+        x=0.5,
+        y=0.5,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+    )
+    return fig
+
+
+def before_after_volume_summary(
+    monthly_df: pd.DataFrame,
+    cutoff_month_start: pd.Timestamp,
+    window_months: int,
+) -> dict | None:
+    if monthly_df.empty:
+        return None
+
+    df = monthly_df.sort_values("month")
+    before = df[df["month"] < cutoff_month_start].tail(window_months)
+    after = df[df["month"] >= cutoff_month_start].head(window_months)
+    if before.empty or after.empty:
+        return None
+
+    before_avg = float(before["avg_daily_traffic"].mean())
+    after_avg = float(after["avg_daily_traffic"].mean())
+    delta = after_avg - before_avg
+    pct = (delta / before_avg * 100.0) if before_avg else 0.0
+
+    summary = pd.DataFrame(
+        {
+            "period": [f"Before ({window_months} mo)", f"After ({window_months} mo)"],
+            "avg_daily_traffic": [before_avg, after_avg],
+        }
+    )
+
+    return {
+        "summary": summary,
+        "before_avg": before_avg,
+        "after_avg": after_avg,
+        "delta": delta,
+        "pct": pct,
+        "before_range": f"{before['month'].min():%b %Y} to {before['month'].max():%b %Y}",
+        "after_range": f"{after['month'].min():%b %Y} to {after['month'].max():%b %Y}",
+    }
+
+
+def volume_change_phrase(delta: float, threshold_pct: float = 1.0, baseline: float | None = None) -> str:
+    if baseline and baseline > 0:
+        pct = abs(delta) / baseline * 100.0
+        if pct < threshold_pct:
+            return "was nearly flat"
+    if delta < 0:
+        return "decreased"
+    if delta > 0:
+        return "increased"
+    return "was nearly flat"
+
+
+def format_whole_number(value: float) -> str:
+    return f"{value:,.0f}"
+
+
+def make_volume_kpi_card(title: str, stats: dict | None, accent_class: str):
+    if stats is None:
+        body = ui.div(
+            ui.div("No data for selected filters", class_="kpi-empty"),
+            class_="kpi-body",
+        )
+    else:
+        body = ui.div(
+            ui.div(
+                ui.div(f"{format_signed(stats['delta'], 0)}", class_="kpi-delta"),
+                ui.div(f"{format_signed(stats['pct'], 1)}%", class_="kpi-pct"),
+                class_="kpi-topline",
+            ),
+            ui.div(
+                ui.div(
+                    ui.div("Before vehicles/day", class_="kpi-metric-label"),
+                    ui.div(format_whole_number(stats["before_avg"]), class_="kpi-metric-value"),
+                    class_="kpi-metric",
+                ),
+                ui.div(
+                    ui.div("After vehicles/day", class_="kpi-metric-label"),
+                    ui.div(format_whole_number(stats["after_avg"]), class_="kpi-metric-value"),
+                    class_="kpi-metric",
+                ),
+                ui.div(
+                    ui.div("Abs change", class_="kpi-metric-label"),
+                    ui.div(format_whole_number(stats["delta"]), class_="kpi-metric-value"),
+                    class_="kpi-metric",
+                ),
+                ui.div(
+                    ui.div("Percent change", class_="kpi-metric-label"),
+                    ui.div(f"{format_signed(stats['pct'], 1)}%", class_="kpi-metric-value"),
+                    class_="kpi-metric",
+                ),
+                class_="kpi-grid",
+            ),
+            ui.div(
+                f"{stats['before_range']} vs {stats['after_range']}",
+                class_="kpi-range",
+            ),
+            class_="kpi-body",
+        )
+
+    return ui.column(
+        4,
+        ui.card(
+            ui.div(title, class_="kpi-title"),
+            body,
+            class_=f"kpi-card {accent_class}",
+        ),
+    )
+
+
+def make_traffic_snapshot_card(
+    title: str,
+    value: float | None,
+    detail: str,
+    accent_class: str,
+):
+    if value is None:
+        body = ui.div(
+            ui.div("No data for selected filters", class_="kpi-empty"),
+            class_="kpi-body",
+        )
+    else:
+        body = ui.div(
+            ui.div(format_whole_number(value), class_="kpi-delta"),
+            ui.div(detail, class_="kpi-range"),
+            class_="kpi-body",
+        )
+
+    return ui.column(
+        4,
+        ui.card(
+            ui.div(title, class_="kpi-title"),
+            body,
+            class_=f"kpi-card {accent_class}",
+        ),
+    )
+
+
+@lru_cache(maxsize=1)
+def load_traffic_raw() -> pd.DataFrame:
+    if not TRAFFIC_CSV.exists():
+        raise FileNotFoundError(f"Missing file: {TRAFFIC_CSV.name}")
+
+    raw = pd.read_csv(TRAFFIC_CSV, dtype=str)
+    df = normalize_columns(raw)
+    required = {"date", "plaza_id", "direction", "vehicles_e_zpass", "vehicles_vtoll"}
+    if not required.issubset(df.columns):
+        raise ValueError("Traffic CSV is missing one or more required columns.")
+
+    out = df.copy()
+    out["date"] = pd.to_datetime(out["date"], errors="coerce")
+    out["plaza_id"] = out["plaza_id"].astype(str).str.strip()
+    out["direction"] = out["direction"].astype(str).str.strip().str.upper()
+    out["vehicles_e_zpass"] = to_numeric_clean(out["vehicles_e_zpass"]).fillna(0)
+    out["vehicles_vtoll"] = to_numeric_clean(out["vehicles_vtoll"]).fillna(0)
+    out["traffic_volume"] = out["vehicles_e_zpass"] + out["vehicles_vtoll"]
+    out = out.dropna(subset=["date"]).copy()
+    out["month"] = out["date"].dt.to_period("M").dt.to_timestamp()
+
+    max_date = out["date"].max()
+    latest_month_start = max_date.to_period("M").to_timestamp()
+    latest_month_end = latest_month_start + pd.offsets.MonthEnd(1)
+    if max_date.normalize() < latest_month_end.normalize():
+        out = out[out["month"] < latest_month_start].copy()
+
+    return out.sort_values("date").reset_index(drop=True)
+
+
+@lru_cache(maxsize=1)
+def traffic_plaza_choices() -> dict[str, str]:
+    choices = {"All": "All plazas"}
+    try:
+        ids = sorted(load_traffic_raw()["plaza_id"].dropna().unique().tolist(), key=lambda value: int(value))
+        choices.update({plaza_id: f"Plaza {plaza_id}" for plaza_id in ids})
+    except Exception:
+        pass
+    return choices
+
+
+def filter_traffic_raw(
+    df: pd.DataFrame,
+    start_date: date,
+    end_date: date,
+    direction_filter: str,
+    plaza_filter: str,
+) -> pd.DataFrame:
+    out = df.copy()
+    start_ts = pd.Timestamp(start_date)
+    end_ts = pd.Timestamp(end_date)
+    out = out[(out["date"] >= start_ts) & (out["date"] <= end_ts)]
+    if direction_filter != "All":
+        out = out[out["direction"] == direction_filter]
+    if plaza_filter != "All":
+        out = out[out["plaza_id"] == plaza_filter]
+    return out
+
+
+def monthly_traffic_series(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return empty_volume_df()
+
+    grouped = (
+        df.groupby("month", as_index=False)
+        .agg(
+            total_traffic=("traffic_volume", "sum"),
+            days_observed=("date", "nunique"),
+        )
+        .sort_values("month")
+    )
+    grouped = grouped[grouped["days_observed"] > 0].copy()
+    if grouped.empty:
+        return empty_volume_df()
+
+    grouped["avg_daily_traffic"] = grouped["total_traffic"] / grouped["days_observed"]
+    return grouped[["month", "avg_daily_traffic", "total_traffic", "days_observed"]].reset_index(drop=True)
+
+
+def build_traffic_before_after_bar(
+    monthly_df: pd.DataFrame,
+    title: str,
+    cutoff_month_start: pd.Timestamp,
+    window_months: int,
+    accent_color: str,
+):
+    stats = before_after_volume_summary(
+        monthly_df=monthly_df,
+        cutoff_month_start=cutoff_month_start,
+        window_months=window_months,
+    )
+    if stats is None:
+        return build_empty_traffic_figure(title, "Not enough data to build before/after comparison.")
+
+    before_label = f"Before ({window_months} mo)"
+    after_label = f"After ({window_months} mo)"
+    summary = stats["summary"]
+
+    fig = px.bar(
+        summary,
+        x="period",
+        y="avg_daily_traffic",
+        color="period",
+        text="avg_daily_traffic",
+        template="plotly_white",
+        color_discrete_map={before_label: "#a0aab4", after_label: accent_color},
+    )
+    fig.update_traces(
+        texttemplate="%{text:,.0f}",
+        textposition="outside",
+        hovertemplate="%{x}<br>%{y:,.0f} vehicles/day<extra></extra>",
+    )
+    fig.update_layout(
+        title=title,
+        xaxis_title="",
+        yaxis_title="Average daily traffic",
+        showlegend=False,
+        margin=dict(l=20, r=20, t=95, b=20),
+        height=360,
+    )
+
+    min_volume = float(summary["avg_daily_traffic"].min())
+    max_volume = float(summary["avg_daily_traffic"].max())
+    padding = max(250.0, (max_volume - min_volume) * 0.8)
+    fig.update_yaxes(range=[max(0, min_volume - padding), max_volume + padding])
+    fig.add_annotation(
+        text=(
+            f"Change: {format_whole_number(stats['delta'])} vehicles/day ({format_signed(stats['pct'], 1)}%)"
+            f"<br>{stats['before_range']} vs {stats['after_range']}"
+        ),
+        x=0.5,
+        y=1.18,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+    )
+    return fig
+
+
+def build_traffic_line(
+    monthly_df: pd.DataFrame,
+    title: str,
+    cutoff_month_start: pd.Timestamp,
+):
+    if monthly_df.empty:
+        return build_empty_traffic_figure(title, "No data available for the selected filters.")
+
+    plot_df = monthly_df.sort_values("month").copy()
+    plot_df["month_iso"] = plot_df["month"].dt.strftime("%Y-%m-%d")
+
+    fig = px.line(
+        plot_df,
+        x="month_iso",
+        y="avg_daily_traffic",
+        markers=True,
+        template="plotly_white",
+    )
+    fig.update_traces(
+        line_color="#457b9d",
+        marker_color="#2a9d8f",
+        hovertemplate="Month: %{x|%b %Y}<br>Traffic: %{y:,.0f} vehicles/day<extra></extra>",
+    )
+    fig.update_layout(
+        title=title,
+        xaxis_title="Month",
+        yaxis_title="Average daily traffic",
+        margin=dict(l=20, r=20, t=70, b=20),
+        height=360,
+        showlegend=False,
+    )
+    fig.update_xaxes(type="date", tickformat="%b %Y", dtick="M2")
+
+    cutoff_str = cutoff_month_start.strftime("%Y-%m-%d")
+    fig.add_vline(x=cutoff_str, line_dash="dash", line_color="#6c757d")
+    fig.add_annotation(
+        x=cutoff_str,
+        y=1,
+        xref="x",
+        yref="paper",
+        text="CRZ start",
+        showarrow=False,
+        yshift=8,
+    )
+    return fig
+
+
+def traffic_context_sentence(
+    direction_filter: str,
+    plaza_filter: str,
+    start_date: date,
+    end_date: date,
+) -> str:
+    plaza_text = "All plazas" if plaza_filter == "All" else f"Plaza {plaza_filter}"
+    direction_text = TRAFFIC_DIRECTION_CHOICES.get(direction_filter, direction_filter)
+    return (
+        f"Direction: {direction_text} | Location: {plaza_text} | "
+        f"Trend window: {start_date:%Y-%m-%d} to {end_date:%Y-%m-%d} | "
+        "Monthly values are average daily traffic and the latest incomplete month is excluded."
+    )
 
 
 app_ui = ui.page_fluid(
@@ -1130,4 +1505,504 @@ def server(input, output, session):
         )
 
 
+def build_shared_styles():
+    return ui.tags.head(
+        ui.tags.style(
+            """
+            :root {
+              --ink: #14213d;
+              --muted: #5c677d;
+              --panel: rgba(255, 255, 255, 0.92);
+              --panel-border: rgba(20, 33, 61, 0.08);
+              --accent-a: #2a9d8f;
+              --accent-b: #f4a261;
+              --accent-c: #e76f51;
+              --accent-d: #457b9d;
+              --bg-top: #f5f3ee;
+              --bg-bottom: #e8eef5;
+            }
+            body {
+              background:
+                radial-gradient(circle at top left, rgba(42, 157, 143, 0.12), transparent 28%),
+                radial-gradient(circle at top right, rgba(244, 162, 97, 0.12), transparent 24%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+              color: var(--ink);
+              font-family: "Aptos", "Trebuchet MS", "Segoe UI", sans-serif;
+            }
+            .dashboard-shell {
+              max-width: 1480px;
+              margin: 0 auto;
+              padding: 24px 10px 36px;
+            }
+            .hero-panel {
+              background: linear-gradient(135deg, rgba(20, 33, 61, 0.98), rgba(36, 74, 116, 0.92));
+              color: #f8fafc;
+              border-radius: 24px;
+              padding: 28px 30px 24px;
+              box-shadow: 0 20px 42px rgba(20, 33, 61, 0.18);
+              margin-bottom: 18px;
+            }
+            .hero-kicker {
+              font-size: 0.82rem;
+              letter-spacing: 0.18em;
+              text-transform: uppercase;
+              opacity: 0.82;
+              margin-bottom: 10px;
+            }
+            .hero-title {
+              font-family: "Aptos Display", "Trebuchet MS", sans-serif;
+              font-size: 2.15rem;
+              font-weight: 700;
+              line-height: 1.08;
+              margin-bottom: 8px;
+            }
+            .hero-subtitle {
+              font-size: 1rem;
+              line-height: 1.55;
+              max-width: 980px;
+              opacity: 0.92;
+              margin: 0;
+            }
+            .filter-card,
+            .chart-card,
+            .summary-card,
+            .kpi-card {
+              background: var(--panel);
+              border: 1px solid var(--panel-border);
+              border-radius: 22px;
+              box-shadow: 0 14px 30px rgba(20, 33, 61, 0.08);
+            }
+            .filter-note {
+              margin-top: 12px;
+              color: var(--muted);
+              font-size: 0.92rem;
+              line-height: 1.45;
+            }
+            .context-note {
+              background: rgba(255, 255, 255, 0.74);
+              border: 1px solid rgba(20, 33, 61, 0.08);
+              border-radius: 16px;
+              padding: 12px 16px;
+              margin: 12px 0 18px;
+              color: var(--muted);
+              font-size: 0.95rem;
+              line-height: 1.45;
+            }
+            .kpi-row {
+              margin-top: 4px;
+            }
+            .kpi-card {
+              min-height: 244px;
+              position: relative;
+              overflow: hidden;
+            }
+            .kpi-card::before {
+              content: "";
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100%;
+              height: 6px;
+              background: var(--accent-a);
+            }
+            .kpi-b::before { background: var(--accent-b); }
+            .kpi-c::before { background: var(--accent-c); }
+            .kpi-d::before { background: var(--accent-d); }
+            .kpi-title {
+              font-size: 0.95rem;
+              font-weight: 700;
+              letter-spacing: 0.01em;
+              color: var(--ink);
+              margin-bottom: 14px;
+            }
+            .kpi-body {
+              display: flex;
+              flex-direction: column;
+              gap: 12px;
+            }
+            .kpi-topline {
+              display: flex;
+              justify-content: space-between;
+              align-items: baseline;
+              gap: 10px;
+            }
+            .kpi-delta {
+              font-size: 1.9rem;
+              font-weight: 700;
+              line-height: 1;
+            }
+            .kpi-pct {
+              font-size: 1rem;
+              font-weight: 700;
+              color: var(--muted);
+            }
+            .kpi-grid {
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 10px;
+            }
+            .kpi-metric {
+              background: rgba(20, 33, 61, 0.04);
+              border-radius: 14px;
+              padding: 10px 12px;
+            }
+            .kpi-metric-label {
+              font-size: 0.76rem;
+              color: var(--muted);
+              text-transform: uppercase;
+              letter-spacing: 0.06em;
+              margin-bottom: 4px;
+            }
+            .kpi-metric-value {
+              font-size: 1.02rem;
+              font-weight: 700;
+            }
+            .kpi-range {
+              font-size: 0.88rem;
+              color: var(--muted);
+            }
+            .kpi-empty {
+              font-size: 0.98rem;
+              color: var(--muted);
+              padding: 12px 0;
+            }
+            .summary-card .card-header,
+            .chart-card .card-header,
+            .filter-card .card-header {
+              font-weight: 700;
+              font-size: 1rem;
+              background: transparent;
+              border-bottom: 1px solid rgba(20, 33, 61, 0.08);
+            }
+            .summary-list {
+              margin: 0;
+              padding-left: 18px;
+              line-height: 1.55;
+            }
+            .summary-list li + li {
+              margin-top: 8px;
+            }
+            .so-what-note {
+              margin-top: 12px;
+              color: var(--muted);
+              font-size: 0.9rem;
+              line-height: 1.45;
+            }
+            .nav-tabs {
+              border-bottom: none;
+              gap: 10px;
+              margin: 0 auto;
+              max-width: 1480px;
+              padding: 18px 10px 0;
+            }
+            .nav-tabs .nav-link {
+              border: 1px solid rgba(20, 33, 61, 0.10);
+              border-radius: 999px;
+              background: rgba(255, 255, 255, 0.78);
+              color: var(--ink);
+              font-weight: 700;
+              padding: 10px 18px;
+            }
+            .nav-tabs .nav-link.active {
+              background: var(--ink);
+              color: #f8fafc;
+              border-color: transparent;
+              box-shadow: 0 10px 22px rgba(20, 33, 61, 0.16);
+            }
+            @media (max-width: 991px) {
+              .hero-title {
+                font-size: 1.8rem;
+              }
+              .kpi-card {
+                min-height: auto;
+              }
+            }
+            """
+        )
+    )
+
+
+def bus_speed_page_ui():
+    return ui.div(
+        ui.div(
+            ui.div("MANHATTAN CONGESTION RELIEF ZONE", class_="hero-kicker"),
+            ui.div("Bus Speed Impact Dashboard", class_="hero-title"),
+            ui.p(
+                "Local CSV analysis with KPI cards, filterable comparisons, and auto-generated manager summary. "
+                "The focus stays on before/after change around CRZ start, while the line charts show how the selected slice behaves over time.",
+                class_="hero-subtitle",
+            ),
+            class_="hero-panel",
+        ),
+        ui.card(
+            ui.card_header("Filters"),
+            ui.row(
+                ui.column(2, ui.input_date("cutoff_date", "CRZ start date", value=DEFAULT_CUTOFF_DATE, format="yyyy-mm-dd")),
+                ui.column(
+                    2,
+                    ui.input_select(
+                        "window_months",
+                        "Before/After window",
+                        choices={"3": "3 months", "6": "6 months", "12": "12 months"},
+                        selected=str(DEFAULT_WINDOW_MONTHS),
+                    ),
+                ),
+                ui.column(2, ui.input_select("day_filter", "Day type", choices=DAY_CHOICES, selected="All")),
+                ui.column(2, ui.input_select("all_period_filter", "All-bus period", choices=ALL_PERIOD_CHOICES, selected="All")),
+                ui.column(2, ui.input_select("cbd_period_filter", "CBD period", choices=CBD_PERIOD_CHOICES, selected="All")),
+                ui.column(2, ui.input_select("borough_filter", "Borough (all-bus only)", choices=BOROUGH_CHOICES, selected="All")),
+            ),
+            ui.row(
+                ui.column(6, ui.input_text("route_filter", "Route contains", placeholder="e.g. M15, Bx12, Q44")),
+            ),
+            ui.div(
+                "Direction is not available in these source files. "
+                "The all-bus file supports Peak/Off-Peak; the CBD file supports Peak/Overnight. "
+                "Borough only exists in the all-bus file, so CBD charts ignore that filter.",
+                class_="filter-note",
+            ),
+            class_="filter-card",
+        ),
+        ui.output_ui("context_note"),
+        ui.output_ui("kpi_cards"),
+        ui.row(
+            ui.column(7, ui.card(ui.card_header("Executive Summary"), ui.output_ui("executive_summary"), class_="summary-card")),
+            ui.column(5, ui.card(ui.card_header("So What"), ui.output_ui("so_what"), class_="summary-card")),
+        ),
+        ui.row(
+            ui.column(6, ui.card(ui.card_header("All Local Bus: Before vs After"), output_widget("all_before_after_plot"), class_="chart-card")),
+            ui.column(6, ui.card(ui.card_header("CBD Local Bus: Before vs After"), output_widget("cbd_before_after_plot"), class_="chart-card")),
+        ),
+        ui.row(
+            ui.column(6, ui.card(ui.card_header("CBD: Express vs Local Speed"), output_widget("cbd_exp_local_plot"), class_="chart-card")),
+            ui.column(6, ui.card(ui.card_header("Local Bus: Within CBD vs Without CBD"), output_widget("within_without_plot"), class_="chart-card")),
+        ),
+        class_="dashboard-shell",
+    )
+
+
+def traffic_volume_page_ui():
+    return ui.div(
+        ui.div(
+            ui.div("MANHATTAN CONGESTION RELIEF ZONE", class_="hero-kicker"),
+            ui.div("Traffic Volume Impact Dashboard", class_="hero-title"),
+            ui.p(
+                "Daily bridge-and-tunnel counts are rolled into complete-month average daily traffic so the before/after comparison stays comparable around CRZ launch. "
+                "The default view emphasizes inbound traffic, which is the slice most directly tied to Manhattan entry demand.",
+                class_="hero-subtitle",
+            ),
+            class_="hero-panel",
+        ),
+        ui.card(
+            ui.card_header("Filters"),
+            ui.row(
+                ui.column(2, ui.input_date("traffic_cutoff_date", "CRZ start date", value=DEFAULT_CUTOFF_DATE, format="yyyy-mm-dd")),
+                ui.column(
+                    2,
+                    ui.input_select(
+                        "traffic_window_months",
+                        "Before/After window",
+                        choices={"3": "3 months", "6": "6 months", "12": "12 months"},
+                        selected=str(DEFAULT_WINDOW_MONTHS),
+                    ),
+                ),
+                ui.column(2, ui.input_select("traffic_direction_filter", "Direction", choices=TRAFFIC_DIRECTION_CHOICES, selected="I")),
+                ui.column(2, ui.input_select("traffic_plaza_filter", "Location", choices=traffic_plaza_choices(), selected="All")),
+                ui.column(2, ui.input_date("traffic_start_date", "Trend start", value=DEFAULT_TRAFFIC_START_DATE, format="yyyy-mm-dd")),
+                ui.column(2, ui.input_date("traffic_end_date", "Trend end", value=DEFAULT_TRAFFIC_END_DATE, format="yyyy-mm-dd")),
+            ),
+            ui.div(
+                "This page uses monthly average daily traffic instead of raw monthly totals so months with different day counts stay comparable. "
+                "The latest incomplete month is automatically excluded to avoid understating post-CRZ traffic.",
+                class_="filter-note",
+            ),
+            class_="filter-card",
+        ),
+        ui.output_ui("traffic_context_note"),
+        ui.output_ui("traffic_kpi_cards"),
+        ui.row(
+            ui.column(7, ui.card(ui.card_header("Traffic Volume Summary"), ui.output_ui("traffic_summary"), class_="summary-card")),
+            ui.column(5, ui.card(ui.card_header("Interpretation"), ui.output_ui("traffic_so_what"), class_="summary-card")),
+        ),
+        ui.row(
+            ui.column(6, ui.card(ui.card_header("Traffic Volume: Before vs After"), output_widget("traffic_before_after_plot"), class_="chart-card")),
+            ui.column(6, ui.card(ui.card_header("Monthly Traffic Trend"), output_widget("traffic_trend_plot"), class_="chart-card")),
+        ),
+        class_="dashboard-shell",
+    )
+
+
+bus_speed_server = server
+
+
+app_ui = ui.page_fluid(
+    build_shared_styles(),
+    ui.navset_tab(
+        ui.nav_panel("Bus Speed", bus_speed_page_ui()),
+        ui.nav_panel("Traffic Volume", traffic_volume_page_ui()),
+        id="main_nav",
+    ),
+)
+
+
+def server(input, output, session):
+    bus_speed_server(input, output, session)
+
+    @reactive.calc
+    def traffic_cutoff_month_start() -> pd.Timestamp:
+        return pd.Timestamp(input.traffic_cutoff_date()).to_period("M").to_timestamp()
+
+    @reactive.calc
+    def traffic_window_months() -> int:
+        try:
+            value = int(input.traffic_window_months())
+            return value if value > 0 else DEFAULT_WINDOW_MONTHS
+        except Exception:
+            return DEFAULT_WINDOW_MONTHS
+
+    @reactive.calc
+    def traffic_dates() -> tuple[date, date]:
+        start_date = input.traffic_start_date()
+        end_date = input.traffic_end_date()
+        if start_date <= end_date:
+            return start_date, end_date
+        return end_date, start_date
+
+    @reactive.calc
+    def traffic_bundle():
+        errors: list[str] = []
+        try:
+            start_date, end_date = traffic_dates()
+            filtered = filter_traffic_raw(
+                df=load_traffic_raw(),
+                start_date=start_date,
+                end_date=end_date,
+                direction_filter=input.traffic_direction_filter(),
+                plaza_filter=input.traffic_plaza_filter(),
+            )
+            monthly = monthly_traffic_series(filtered)
+        except Exception as exc:
+            monthly = empty_volume_df()
+            errors.append(f"Traffic load failed: {exc}")
+        return {"monthly": monthly, "errors": errors}
+
+    @reactive.calc
+    def traffic_stats():
+        return before_after_volume_summary(
+            monthly_df=traffic_bundle()["monthly"],
+            cutoff_month_start=traffic_cutoff_month_start(),
+            window_months=traffic_window_months(),
+        )
+
+    @render.ui
+    def traffic_context_note():
+        bundle = traffic_bundle()
+        if bundle["errors"]:
+            return ui.div("Data warning: " + " | ".join(bundle["errors"]), class_="context-note")
+        start_date, end_date = traffic_dates()
+        return ui.div(
+            traffic_context_sentence(
+                direction_filter=input.traffic_direction_filter(),
+                plaza_filter=input.traffic_plaza_filter(),
+                start_date=start_date,
+                end_date=end_date,
+            ),
+            class_="context-note",
+        )
+
+    @render.ui
+    def traffic_kpi_cards():
+        stats = traffic_stats()
+        return ui.div(
+            ui.row(
+                make_volume_kpi_card("Average Daily Traffic Change", stats, "kpi-a"),
+                make_traffic_snapshot_card(
+                    "Before Window",
+                    None if stats is None else stats["before_avg"],
+                    "Average daily traffic before CRZ",
+                    "kpi-b",
+                ),
+                make_traffic_snapshot_card(
+                    "After Window",
+                    None if stats is None else stats["after_avg"],
+                    "Average daily traffic after CRZ",
+                    "kpi-d",
+                ),
+            ),
+            class_="kpi-row",
+        )
+
+    @render.ui
+    def traffic_summary():
+        stats = traffic_stats()
+        bundle = traffic_bundle()
+        if bundle["errors"]:
+            return ui.div("Summary unavailable because the traffic dataset failed to load.")
+        if stats is None:
+            return ui.div("Not enough complete monthly traffic data is available for the selected filters.")
+
+        direction_label = TRAFFIC_DIRECTION_CHOICES.get(input.traffic_direction_filter(), input.traffic_direction_filter())
+        plaza_text = "all plazas" if input.traffic_plaza_filter() == "All" else f"Plaza {input.traffic_plaza_filter()}"
+        bullets = [
+            (
+                f"For {direction_label.lower()} traffic at {plaza_text}, average daily volume "
+                f"{volume_change_phrase(stats['delta'], baseline=stats['before_avg'])} from "
+                f"{format_whole_number(stats['before_avg'])} to {format_whole_number(stats['after_avg'])} vehicles/day "
+                f"across the selected {traffic_window_months()}-month windows."
+            ),
+            (
+                f"The net shift is {format_whole_number(stats['delta'])} vehicles/day "
+                f"({format_signed(stats['pct'], 1)}%), comparing {stats['before_range']} against {stats['after_range']}."
+            ),
+            (
+                "The calculation uses complete months only and averages by observed days, which avoids overstating changes driven by shorter months or the partial April 2025 tail."
+            ),
+            (
+                "Inbound traffic is the default because it is the most direct proxy for vehicles entering Manhattan, which makes the CRZ comparison more policy-relevant than a pooled two-way count."
+            ),
+        ]
+        return make_summary_list(bullets)
+
+    @render.ui
+    def traffic_so_what():
+        stats = traffic_stats()
+        if stats is None:
+            return ui.div("Interpretation is unavailable for the selected traffic slice.")
+
+        delta = stats["after_avg"] - stats["before_avg"]
+        direction_text = "fewer" if delta < 0 else "more"
+        bullets = [
+            f"The selected slice translates to roughly {format_whole_number(abs(delta))} {direction_text} vehicles per day after CRZ in the comparison window.",
+            "That makes the traffic page a useful complement to the bus-speed page: one view tracks whether road demand softened, and the other shows whether bus movement improved.",
+            "If you switch to a single plaza, treat the result as a corridor-level signal; if you keep all plazas selected, treat it as a broader Manhattan access pattern.",
+        ]
+        return ui.div(
+            make_summary_list(bullets),
+            ui.div(
+                "Use the bar chart for the headline before/after shift and the line chart to check whether the change is sustained month over month.",
+                class_="so-what-note",
+            ),
+        )
+
+    @render_widget
+    def traffic_before_after_plot():
+        return build_traffic_before_after_bar(
+            monthly_df=traffic_bundle()["monthly"],
+            title="Traffic Volume: Before vs After",
+            cutoff_month_start=traffic_cutoff_month_start(),
+            window_months=traffic_window_months(),
+            accent_color="#2a9d8f",
+        )
+
+    @render_widget
+    def traffic_trend_plot():
+        return build_traffic_line(
+            monthly_df=traffic_bundle()["monthly"],
+            title="Monthly Average Daily Traffic",
+            cutoff_month_start=traffic_cutoff_month_start(),
+        )
+
+
 app = App(app_ui, server)
+
+
