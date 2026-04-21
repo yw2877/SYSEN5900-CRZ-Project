@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NYC Congestion Pricing | Academic Research Overview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;900&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,300&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root {
+    --ink: #0f1923;
+    --ink-light: #2a3a4a;
+    --paper: #f4f0e8;
+    --paper-dark: #e8e2d5;
+    --accent: #c0392b;
+    --accent-2: #2980b9;
+    --accent-3: #16a085;
+    --gold: #b8860b;
+    --rule: #c8bfa8;
+    --serif: 'Playfair Display', Georgia, serif;
+    --body: 'Source Serif 4', Georgia, serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--body);
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 17px;
+    line-height: 1.7;
+  }
+
+  /* ---- NAV ---- */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--ink);
+    color: var(--paper);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 3rem;
+    height: 52px;
+    border-bottom: 3px solid var(--accent);
+  }
+  nav .brand {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    opacity: 0.8;
+  }
+  nav ul {
+    display: flex;
+    gap: 2.2rem;
+    list-style: none;
+  }
+  nav ul li a {
+    color: var(--paper);
+    text-decoration: none;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.75;
+    transition: opacity 0.2s;
+  }
+  nav ul li a:hover { opacity: 1; }
+
+  /* ---- HERO ---- */
+  .hero {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 5rem 3rem 4rem;
+    position: relative;
+    overflow: hidden;
+    border-bottom: 4px double var(--accent);
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 39px,
+      rgba(255,255,255,0.03) 39px,
+      rgba(255,255,255,0.03) 40px
+    );
+    pointer-events: none;
+  }
+  .hero-inner { max-width: 900px; margin: 0 auto; position: relative; }
+  .hero-label {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 1.2rem;
+  }
+  .hero h1 {
+    font-family: var(--serif);
+    font-size: clamp(2.4rem, 5vw, 4rem);
+    font-weight: 900;
+    line-height: 1.08;
+    margin-bottom: 1.4rem;
+    letter-spacing: -0.01em;
+  }
+  .hero h1 em {
+    font-style: italic;
+    color: #e8d5a3;
+  }
+  .hero .subtitle {
+    font-size: 1.05rem;
+    font-weight: 300;
+    opacity: 0.78;
+    max-width: 620px;
+    line-height: 1.65;
+    margin-bottom: 2rem;
+  }
+  .hero-meta {
+    display: flex;
+    gap: 3rem;
+    flex-wrap: wrap;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255,255,255,0.15);
+  }
+  .hero-meta-item label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    opacity: 0.5;
+    margin-bottom: 0.2rem;
+  }
+  .hero-meta-item span {
+    font-size: 0.85rem;
+    opacity: 0.85;
+  }
+
+  /* ---- STATS BAND ---- */
+  .stats-band {
+    background: var(--accent);
+    color: white;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-bottom: 3px solid var(--ink);
+  }
+  .stat-cell {
+    padding: 1.8rem 2rem;
+    border-right: 1px solid rgba(255,255,255,0.2);
+    text-align: center;
+  }
+  .stat-cell:last-child { border-right: none; }
+  .stat-num {
+    font-family: var(--serif);
+    font-size: 2.6rem;
+    font-weight: 700;
+    display: block;
+    line-height: 1;
+    margin-bottom: 0.3rem;
+  }
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+
+  /* ---- LAYOUT ---- */
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 2.5rem; }
+
+  section {
+    padding: 4.5rem 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 0.6rem;
+  }
+
+  h2 {
+    font-family: var(--serif);
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 1.5rem;
+    color: var(--ink);
+  }
+
+  h3 {
+    font-family: var(--serif);
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-bottom: 0.8rem;
+    color: var(--ink);
+  }
+
+  p { margin-bottom: 1rem; color: var(--ink-light); }
+  p:last-child { margin-bottom: 0; }
+
+  /* ---- TWO-COL ---- */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3.5rem;
+    align-items: start;
+  }
+  .three-col {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+    margin-top: 2rem;
+  }
+
+  /* ---- PULLQUOTE ---- */
+  .pullquote {
+    border-left: 4px solid var(--accent);
+    margin: 2rem 0;
+    padding: 1rem 1.5rem;
+    background: var(--paper-dark);
+  }
+  .pullquote p {
+    font-family: var(--serif);
+    font-size: 1.2rem;
+    font-style: italic;
+    color: var(--ink);
+    margin: 0 0 0.5rem;
+  }
+  .pullquote cite {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  /* ---- CHARTS ---- */
+  .chart-wrap {
+    background: white;
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--ink);
+    padding: 1.5rem;
+    margin: 2rem 0;
+  }
+  .chart-title {
+    font-family: var(--serif);
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+  }
+  .chart-source {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    color: #888;
+    letter-spacing: 0.06em;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+  }
+  .chart-wrap canvas { max-height: 280px; }
+
+  /* ---- TIMELINE ---- */
+  .timeline { position: relative; padding-left: 2rem; margin: 2rem 0; }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.5rem;
+    bottom: 0;
+    width: 2px;
+    background: var(--rule);
+  }
+  .tl-item {
+    position: relative;
+    margin-bottom: 2rem;
+    padding-left: 1.5rem;
+  }
+  .tl-item::before {
+    content: '';
+    position: absolute;
+    left: -2.4rem;
+    top: 0.45rem;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--paper);
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .tl-year {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 0.2rem;
+  }
+  .tl-text { font-size: 0.9rem; color: var(--ink-light); }
+
+  /* ---- CARD ---- */
+  .card {
+    background: white;
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--accent-2);
+    padding: 1.5rem;
+  }
+  .card.green { border-top-color: var(--accent-3); }
+  .card.red { border-top-color: var(--accent); }
+  .card.gold { border-top-color: var(--gold); }
+
+  .card-num {
+    font-family: var(--serif);
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--accent-2);
+    line-height: 1;
+    margin-bottom: 0.4rem;
+  }
+  .card.green .card-num { color: var(--accent-3); }
+  .card.red .card-num { color: var(--accent); }
+  .card.gold .card-num { color: var(--gold); }
+
+  .card-label { font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: #888; margin-bottom: 0.5rem; }
+  .card p { font-size: 0.87rem; }
+
+  /* ---- TABLE ---- */
+  table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.9rem; }
+  thead { background: var(--ink); color: var(--paper); }
+  th { padding: 0.75rem 1rem; text-align: left; font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; }
+  td { padding: 0.65rem 1rem; border-bottom: 1px solid var(--rule); }
+  tr:nth-child(even) td { background: var(--paper-dark); }
+
+  /* ---- COMPARISON ---- */
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border: 1px solid var(--rule);
+    margin: 2rem 0;
+  }
+  .compare-col { padding: 1.5rem; }
+  .compare-col:first-child { border-right: 1px solid var(--rule); background: #fff8f8; }
+  .compare-col:last-child { background: #f6fff8; }
+  .compare-col h4 { font-family: var(--serif); font-size: 1.05rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid; }
+  .compare-col:first-child h4 { color: var(--accent); border-color: var(--accent); }
+  .compare-col:last-child h4 { color: var(--accent-3); border-color: var(--accent-3); }
+  .compare-col ul { list-style: none; }
+  .compare-col ul li { padding: 0.4rem 0; font-size: 0.88rem; color: var(--ink-light); border-bottom: 1px dotted var(--rule); }
+  .compare-col ul li:last-child { border: none; }
+
+  /* ---- PROGRESS BARS ---- */
+  .metric-bar { margin-bottom: 1.2rem; }
+  .metric-bar label { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.35rem; }
+  .metric-bar label span { color: var(--accent); font-weight: 500; }
+  .bar-track { height: 8px; background: var(--paper-dark); border-radius: 0; overflow: hidden; }
+  .bar-fill { height: 100%; background: var(--ink); border-radius: 0; transition: width 1.5s ease; }
+  .bar-fill.blue { background: var(--accent-2); }
+  .bar-fill.green { background: var(--accent-3); }
+  .bar-fill.red { background: var(--accent); }
+
+  /* ---- FOOTER ---- */
+  footer {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 3rem;
+    text-align: center;
+  }
+  footer p { color: rgba(244,240,232,0.5); font-size: 0.82rem; margin-bottom: 0.3rem; }
+
+  /* ---- DIVIDER ---- */
+  .rule-ornament { text-align: center; color: var(--rule); font-size: 1.2rem; margin: 1.5rem 0; letter-spacing: 0.5rem; }
+
+  /* ---- INLINE CITE ---- */
+  .source-tag {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    background: var(--paper-dark);
+    color: var(--ink-light);
+    border: 1px solid var(--rule);
+    padding: 0.1rem 0.4rem;
+    letter-spacing: 0.06em;
+  }
+
+  /* ---- GLOBAL MAP SVG ---- */
+  .map-svg-wrap {
+    background: white;
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--ink);
+    padding: 1.5rem;
+    margin: 2rem 0;
+  }
+
+  @media (max-width: 768px) {
+    .stats-band { grid-template-columns: repeat(2, 1fr); }
+    .two-col, .three-col, .compare-grid { grid-template-columns: 1fr; }
+    nav ul { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="brand">Urban Policy Research · 2025</div>
+  <ul>
+    <li><a href="#background">Background</a></li>
+    <li><a href="#results">Results</a></li>
+    <li><a href="#environment">Environment</a></li>
+    <li><a href="#economy">Economy</a></li>
+    <li><a href="#funding">Transit Funding</a></li>
+    <li><a href="#debate">Debate</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-label">Academic Project Overview · Spring 2026</div>
+    <h1>Congestion Pricing<br>in <em>New York City</em></h1>
+    <p class="subtitle">America's first cordon-based urban congestion toll — a comprehensive analysis of its policy design, first-year outcomes, environmental impacts, economic effects, and ongoing political controversy.</p>
+    <div class="hero-meta">
+      <div class="hero-meta-item"><label>Program Start</label><span>January 5, 2025</span></div>
+      <div class="hero-meta-item"><label>Zone</label><span>Manhattan below 60th St (CRZ)</span></div>
+      <div class="hero-meta-item"><label>Base Toll</label><span>$9 per vehicle (peak hours)</span></div>
+      <div class="hero-meta-item"><label>Data Through</label><span>January 2026 (Year 1)</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- KEY STATS BAND -->
+<div class="stats-band">
+  <div class="stat-cell">
+    <span class="stat-num">27M</span>
+    <span class="stat-label">Fewer vehicles Year 1</span>
+  </div>
+  <div class="stat-cell">
+    <span class="stat-num">11%</span>
+    <span class="stat-label">Avg. traffic reduction</span>
+  </div>
+  <div class="stat-cell">
+    <span class="stat-num">$550M</span>
+    <span class="stat-label">Net revenue (2025 est.)</span>
+  </div>
+  <div class="stat-cell">
+    <span class="stat-num">22%</span>
+    <span class="stat-label">PM2.5 drop in CRZ</span>
+  </div>
+</div>
+
+<!-- ======================= SECTION 1: BACKGROUND ======================= -->
+<section id="background">
+  <div class="container">
+    <div class="section-label">§ 01 — Policy Background</div>
+    <div class="two-col">
+      <div>
+        <h2>How Did We Get Here?</h2>
+        <p>New York City's Central Business District Tolling Program (CBDTP) — popularly known as congestion pricing — is the first cordon-based urban road toll in the United States. Charging most vehicles that enter Manhattan south of 60th Street, it was designed simultaneously to reduce gridlock and generate dedicated funding for mass transit infrastructure.</p>
+        <p>The idea dates to 2007, when Mayor Michael Bloomberg proposed a similar scheme, but it failed to advance legislatively. A decade later, a transit crisis reignited the debate: the summer of 2017 saw a Q-train derailment, A-line track fires, and packed F-trains stranded in tunnels — leading Governor Cuomo to declare the system in a "state of emergency." The crisis made clear that the MTA's budget, untouched for nearly three decades, needed structural reform.</p>
+        <p>In 2019, the New York State Legislature included congestion pricing in the state budget under Article 44-C, the Traffic Mobility Act. Years of environmental review, legal battles, federal approvals, and political negotiations followed — including a 2024 pause ordered by Gov. Hochul — before the program finally activated at midnight on January 5, 2025.</p>
+
+        <div class="pullquote">
+          <p>"Early results are exactly consistent with what the congestion pricing models predicted."</p>
+          <cite>— Charles Komanoff, Eno Center for Transportation Panel, April 2025</cite>
+        </div>
+      </div>
+
+      <div>
+        <h3>Legislative Timeline</h3>
+        <div class="timeline">
+          <div class="tl-item">
+            <div class="tl-year">2007</div>
+            <div class="tl-text">Mayor Bloomberg proposes NYC congestion pricing; fails in state legislature.</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-year">2017</div>
+            <div class="tl-text">"Summer of Hell" — cascading subway failures prompt Governor Cuomo to declare a transit emergency.</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-year">2019</div>
+            <div class="tl-text">Traffic Mobility Act enacted; TBTA authorized to establish tolling in the Central Business District.</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-year">2021–2023</div>
+            <div class="tl-text">Federal environmental review, toll structure negotiations, and Traffic Mobility Review Board formation.</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-year">Jun 2024</div>
+            <div class="tl-text">Gov. Hochul pauses the program; outcry leads to revised $9 toll plan (reduced from $15).</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-year">Jan 5, 2025</div>
+            <div class="tl-text">Program goes live at midnight — America's first urban congestion pricing system is operational.</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-year">Jan–Jun 2025</div>
+            <div class="tl-text">Federal government attempts to terminate the program; MTA successfully defends in court multiple times.</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-year">Jan 2026</div>
+            <div class="tl-text">One-year anniversary; MTA reports 27M fewer vehicles and ~$550M in net toll revenue.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rule-ornament">· · ·</div>
+    <h3>Toll Structure</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Vehicle Type</th>
+          <th>Peak Hour Toll</th>
+          <th>Off-Peak (9 PM–5 AM)</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Passenger Vehicles</td><td>$9.00</td><td>$2.25</td><td>Once-daily cap; E-ZPass required for dynamic pricing</td></tr>
+        <tr><td>Motorcycles</td><td>$4.50</td><td>$1.05</td><td>Half the passenger vehicle rate</td></tr>
+        <tr><td>Small Trucks / Buses</td><td>$14.40</td><td>$3.60</td><td>Two-axle commercial vehicles</td></tr>
+        <tr><td>Large Trucks</td><td>$21.60</td><td>$5.40</td><td>Multi-axle; 75% overnight discount encouraged</td></tr>
+        <tr><td>Taxis (per trip)</td><td>$0.75</td><td>$0.75</td><td>Per-trip charge for trips into CRZ</td></tr>
+        <tr><td>Rideshare (per trip)</td><td>$1.50</td><td>$1.50</td><td>Uber, Lyft, Via etc.</td></tr>
+        <tr><td>Low-income drivers</td><td>50% discount</td><td>—</td><td>After 10th monthly toll, for earners under $50K</td></tr>
+      </tbody>
+    </table>
+    <p style="font-family: var(--mono); font-size: 0.62rem; color: #888; letter-spacing: 0.06em; text-transform: uppercase;">Source: MTA / Governor Hochul's Office, November 2024</p>
+  </div>
+</section>
+
+<!-- ======================= SECTION 2: TRAFFIC RESULTS ======================= -->
+<section id="results">
+  <div class="container">
+    <div class="section-label">§ 02 — Traffic & Mobility Outcomes</div>
+    <h2>Year One: Traffic Down Across the Region</h2>
+
+    <div class="two-col">
+      <div>
+        <p>By virtually every traffic metric, congestion pricing has delivered on its primary mandate. In Year 1, more than 27 million fewer vehicles entered Manhattan's Congestion Relief Zone (CRZ), representing an average daily reduction of 73,000 vehicles — an 11% drop compared to 2024 baseline levels.</p>
+        <p>Speed improvements were measurable across all road types. According to NBER Working Paper 33584, average speeds inside the CBD rose from 8.2 to 9.7 mph — a 15% improvement. During the most congested periods (weekday afternoons, 1–7 PM), speed gains exceeded 20%; on weekend evenings they exceeded 25%.</p>
+        <p>Perhaps more striking: traffic volumes fell even as Manhattan office occupancy rose. The Partnership for New York City reported that Manhattan office attendance reached 76% of pre-pandemic levels in March 2025, up from 72% in 2024 — suggesting drivers are genuinely switching to transit rather than simply staying home.</p>
+      </div>
+      <div>
+        <div class="chart-wrap">
+          <div class="chart-title">Average Daily Vehicle Entries to CRZ</div>
+          <div class="chart-source">Source: MTA, 2024–2025</div>
+          <canvas id="trafficChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="three-col">
+      <div class="card red">
+        <div class="card-label">Traffic Delays</div>
+        <div class="card-num">−25%</div>
+        <p>Delays within the CRZ dropped by 25%, with a 9% reduction across the broader metro region. (RPA / Waze report, June 2025)</p>
+      </div>
+      <div class="card blue">
+        <div class="card-label">Holland Tunnel Rush Hours</div>
+        <div class="card-num">−65%</div>
+        <p>Rush hour delays in the Holland Tunnel fell 65% compared to 2024. Lincoln Tunnel MTA express buses run 24% faster.</p>
+      </div>
+      <div class="card green">
+        <div class="card-label">Bus Speeds in CRZ</div>
+        <div class="card-num">+2.3%</div>
+        <p>City buses became measurably faster within the zone, reversing multi-year decline trends observed in 2023 and 2024.</p>
+      </div>
+    </div>
+
+    <div class="rule-ornament">· · ·</div>
+
+    <h3>Speed Gains by Road Type</h3>
+    <p style="margin-bottom: 1.5rem;">Analysis of Google Maps Traffic Trends data (NBER, Sep 2024 – Feb 2025) comparing NYC to five peer cities (Philadelphia, Boston, Chicago, Atlanta, Baltimore):</p>
+    <div class="metric-bar">
+      <label>Highways <span>+13% avg. speed</span></label>
+      <div class="bar-track"><div class="bar-fill" style="width:78%"></div></div>
+    </div>
+    <div class="metric-bar">
+      <label>Arterial Roads <span>+10% avg. speed</span></label>
+      <div class="bar-track"><div class="bar-fill blue" style="width:60%"></div></div>
+    </div>
+    <div class="metric-bar">
+      <label>Local Roads <span>+8% avg. speed</span></label>
+      <div class="bar-track"><div class="bar-fill green" style="width:48%"></div></div>
+    </div>
+    <div class="metric-bar">
+      <label>Weekend Evening CBD <span>+25% avg. speed</span></label>
+      <div class="bar-track"><div class="bar-fill red" style="width:93%"></div></div>
+    </div>
+    <p style="font-family: var(--mono); font-size: 0.62rem; color: #888; letter-spacing: 0.06em; text-transform: uppercase; margin-top: 0.5rem;">Source: NBER Working Paper 33584 — Cook, Kreidieh, Vasserman et al., 2025</p>
+
+    <div class="rule-ornament">· · ·</div>
+    <h3>Safety Improvements</h3>
+    <div class="two-col">
+      <div>
+        <p>Traffic safety improvements have accompanied the speed and volume gains. Crashes within the CRZ declined by 7%, and traffic injuries fell 8% year-over-year. New York City as a whole recorded its fewest traffic deaths in history in 2025, down 19% from 2024 — the lowest since reliable records began.</p>
+        <p>Noise pollution also fell sharply. Vehicle noise complaints to NYC's 311 system declined 23% over the year, and honking complaints specifically dropped 45% in 2025 compared to 2024.</p>
+      </div>
+      <div>
+        <div class="chart-wrap">
+          <div class="chart-title">Safety & Quality-of-Life Metrics (% Change, 2025 vs. 2024)</div>
+          <div class="chart-source">Source: NYPD, NYC 311, MTA Year-1 Report</div>
+          <canvas id="safetyChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= SECTION 3: ENVIRONMENT ======================= -->
+<section id="environment">
+  <div class="container">
+    <div class="section-label">§ 03 — Environmental Impact</div>
+    <h2>Air Quality, Emissions &amp; Sustainability</h2>
+
+    <div class="two-col">
+      <div>
+        <div class="chart-wrap">
+          <div class="chart-title">PM2.5 Reduction: NYC vs. Global Peers</div>
+          <div class="chart-source">Sources: Cornell npj Clean Air (2025); Stockholm (2006–2010); London (2019–2022)</div>
+          <canvas id="airChart"></canvas>
+        </div>
+      </div>
+      <div>
+        <p>A landmark study published in <em>npj Clean Air</em> (December 2025) by Cornell University researchers analyzed 17,758 observations from 42 air quality monitors across 518 days. In the first six months of the program, average daily maximum PM2.5 concentrations in the CRZ declined by 3.05 micrograms per cubic meter — a reduction of 22% compared to the control period.</p>
+        <p>This surpasses results seen in other congestion pricing implementations globally. Stockholm's program reduced PM2.5 by 5–15% between 2006 and 2010; London saw a 7% drop between 2019 and 2022. Cornell's lead researcher attributed NYC's larger impact to the sheer density and scale of the city's population and traffic.</p>
+        <p>Crucially, the study found that pollution did not simply shift to surrounding areas — declines were observed across all five boroughs and into surrounding suburbs, suggesting commuters are genuinely choosing cleaner transportation modes rather than rerouting vehicles.</p>
+        <div class="pullquote">
+          <p>"This tells us congestion pricing didn't simply relocate air pollution to the suburbs. Instead, folks are choosing cleaner transportation options altogether."</p>
+          <cite>— Prof. Fei Gao, Director, Cornell Center for Transportation, Environment and Community Health</cite>
+        </div>
+      </div>
+    </div>
+
+    <div class="three-col">
+      <div class="card green">
+        <div class="card-label">Vehicular Emissions</div>
+        <div class="card-num">−16–22%</div>
+        <p>A 2026 <em>Nature</em> study estimated vehicular emissions dropped 16–22% in the first 8 weeks, driven by fewer vehicle trips and faster average speeds. <span class="source-tag">Nature, 2026</span></p>
+      </div>
+      <div class="card green">
+        <div class="card-label">CO₂ Rate per km</div>
+        <div class="card-num">−2–3%</div>
+        <p>CO₂ emission rates per kilometer driven decreased for vehicles in the CBD and high co-occurrence roads. <span class="source-tag">NBER WP 33584</span></p>
+      </div>
+      <div class="card gold">
+        <div class="card-label">Noise Complaints</div>
+        <div class="card-num">−45%</div>
+        <p>Honking and vehicle noise complaints to NYC 311 dropped 45% in 2025, reflecting reduced idling and gridlock. <span class="source-tag">NYC 311 Data</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= SECTION 4: ECONOMY ======================= -->
+<section id="economy">
+  <div class="container">
+    <div class="section-label">§ 04 — Economic Effects</div>
+    <h2>Business Activity &amp; Manhattan Economy</h2>
+    <p style="max-width: 700px; margin-bottom: 2rem;">Critics warned congestion pricing would devastate Manhattan's economy by deterring shoppers, tourists, and office workers. First-year data tells a different story — Manhattan's economy broadly strengthened in 2025.</p>
+
+    <div class="chart-wrap">
+      <div class="chart-title">Key Economic Indicators, Manhattan 2025 (Year-over-Year Change)</div>
+      <div class="chart-source">Sources: Colliers, NYC EDC, NYS Dept. of Labor, placer.ai, Broadway League, 2025</div>
+      <canvas id="econChart"></canvas>
+    </div>
+
+    <div class="three-col">
+      <div class="card blue">
+        <div class="card-label">Office Foot Traffic</div>
+        <div class="card-num">+2.4%</div>
+        <p>16 million more visits to the CRZ through November 2025 vs. same period in 2024. NYC became the first major U.S. city to exceed pre-pandemic office traffic in July 2025. <span class="source-tag">placer.ai / NYC EDC</span></p>
+      </div>
+      <div class="card blue">
+        <div class="card-label">Office Leasing</div>
+        <div class="card-num">+9.2%</div>
+        <p>Q3 2025 office leasing activity was up 9.2% year-over-year, exceeding pre-pandemic levels and on pace for the highest volume since 2002. <span class="source-tag">Colliers, Q3 2025</span></p>
+      </div>
+      <div class="card blue">
+        <div class="card-label">Retail Sales Growth</div>
+        <div class="card-num">+$900M</div>
+        <p>Retail sales in the CRZ grew by $900 million in 2025. Vacant storefronts fell by 1 percentage point. Private sector employment rose 2.0%, more than double the national rate. <span class="source-tag">Gov. Hochul Year-1 Report</span></p>
+      </div>
+    </div>
+
+    <div class="compare-grid" style="margin-top: 2.5rem;">
+      <div class="compare-col">
+        <h4>Pre-Implementation Concerns</h4>
+        <ul>
+          <li>Economic harm to small businesses near zone boundaries</li>
+          <li>Working-class commuters penalized disproportionately</li>
+          <li>Retailers would lose drive-in customers</li>
+          <li>Delivery cost increases passed to consumers</li>
+          <li>Outer-borough residents, especially Staten Island, unfairly burdened</li>
+        </ul>
+      </div>
+      <div class="compare-col">
+        <h4>Year-1 Observed Outcomes</h4>
+        <ul>
+          <li>Retail sales up $900M; vacant storefronts down 1pp</li>
+          <li>Low-income discount program operational; transit alternatives faster</li>
+          <li>16M more CRZ visits; foot traffic up 2.4%</li>
+          <li>Some delivery cost increases noted by business owners</li>
+          <li>Staten Island and Bronx routes saw faster travel times overall</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= SECTION 5: TRANSIT FUNDING ======================= -->
+<section id="funding">
+  <div class="container">
+    <div class="section-label">§ 05 — Transit Investment</div>
+    <h2>Funding New York's Transit Future</h2>
+
+    <div class="two-col">
+      <div>
+        <p>The second pillar of congestion pricing is transit funding. By bonding against a steady revenue stream, the MTA can access $15 billion in capital for its 2020–2024 capital plan — the largest transit capital program in New York State history.</p>
+        <p>Net toll revenue in 2025 reached an estimated $550 million — approximately $50 million above the original $500 million projection. Revenue breakdown in the early months showed 68% from passenger vehicles, 22% from taxis and for-hire vehicles, 9% from trucks, and 1% from buses and motorcycles.</p>
+        <p>As of January 2026, more than $6 billion in projects unlocked by congestion revenue are already in construction, with more to be awarded throughout 2026.</p>
+      </div>
+      <div>
+        <div class="chart-wrap">
+          <div class="chart-title">Monthly Net Toll Revenue, 2025 (Millions USD)</div>
+          <div class="chart-source">Sources: MTA Monthly Reports; Davis Vanguard Dec 2025; AMNY May 2025</div>
+          <canvas id="revenueChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="rule-ornament">· · ·</div>
+    <h3>Capital Projects Funded by Congestion Relief</h3>
+    <table>
+      <thead>
+        <tr><th>Project</th><th>Scope</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Second Avenue Subway Phase 2</td><td>Extension to East Harlem (96th → 125th St)</td><td>Tunneling contract awarded, in construction</td></tr>
+        <tr><td>R211 Subway Cars</td><td>435 additional cars, incl. 80 open-gangway</td><td>Ordered; deliveries ongoing</td></tr>
+        <tr><td>CBTC Signals — A/C Lines</td><td>Downtown Brooklyn → Ozone Park; 600K+ daily riders</td><td>In construction</td></tr>
+        <tr><td>ADA Upgrades</td><td>23+ stations; new elevators & reconstructed platforms</td><td>Active at 9 stations as of Jan 2026</td></tr>
+        <tr><td>LIRR Locomotives</td><td>44 new dual-mode locomotives</td><td>Ordered</td></tr>
+        <tr><td>Metro-North / LIRR Cars</td><td>300 new M9A rail cars</td><td>Ordered</td></tr>
+        <tr><td>A/C Signal Modernization</td><td>Signals on A/C lines untouched since 1930s</td><td>Active</td></tr>
+        <tr><td>Electric Bus Fleet</td><td>New electric buses systemwide</td><td>Active procurement</td></tr>
+      </tbody>
+    </table>
+
+    <div class="pullquote">
+      <p>"We're redoing the signals on this line, the A and the C, which haven't been touched since the 1930s. New cars, new signals, new power systems — the basic stuff."</p>
+      <cite>— Janno Lieber, MTA Chair & CEO, December 2025</cite>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= SECTION 6: DEBATE ======================= -->
+<section id="debate">
+  <div class="container">
+    <div class="section-label">§ 06 — Ongoing Controversy & Debate</div>
+    <h2>Political Landscape &amp; Remaining Tensions</h2>
+    <p style="max-width: 700px; margin-bottom: 2rem;">Despite broadly positive first-year data, congestion pricing remains politically contested. Federal opposition, ongoing litigation, and community-level equity concerns continue to shape the program's future.</p>
+
+    <div class="two-col">
+      <div>
+        <h3>Federal Opposition</h3>
+        <p>President Trump declared "CONGESTION PRICING IS DEAD" in February 2025, with the USDOT revoking federal approval the same day. Gov. Hochul and the MTA filed suit immediately. A federal judge blocked federal retaliatory funding cuts in May 2025, and as of early 2026, tolling cameras remain operational while litigation continues.</p>
+        <h3 style="margin-top: 1.5rem;">Legal Landscape</h3>
+        <p>The MTA has fought off at least nine lawsuits — from the Town of Hempstead, New Jersey, federal agencies, and various municipalities. Two cases remained pending as of January 2026. Courts have consistently allowed the program to continue operating.</p>
+      </div>
+      <div>
+        <h3>Community & Equity Concerns</h3>
+        <p>Some local officials, particularly from outer boroughs, continue to raise equity concerns. State Sen. Jessica Scarcella-Spanton (Staten Island/Brooklyn) cited disproportionate respiratory illness rates on Staten Island's North Shore as evidence of environmental injustice from traffic diversion.</p>
+        <p>The program includes mitigation measures: $20M for an asthma center in the Bronx, $15M to replace diesel refrigeration units at Hunts Point Market, $20M for electric truck charging, and $10M for air filtration in highway-adjacent schools.</p>
+        <h3 style="margin-top: 1.5rem;">Academic Consensus</h3>
+        <p>Transportation researchers broadly view the program as a success by its stated metrics, while noting the $9 toll represents a political compromise below what economists would consider the optimal level to capture all external costs of driving.</p>
+      </div>
+    </div>
+
+    <div class="rule-ornament">· · ·</div>
+
+    <div class="chart-wrap">
+      <div class="chart-title">Global Congestion Pricing: Comparative PM2.5 Reduction</div>
+      <div class="chart-source">Sources: Cornell npj Clean Air (NYC, 2025); Various peer-reviewed studies (Stockholm, London)</div>
+      <canvas id="globalChart"></canvas>
+    </div>
+
+    <div class="pullquote" style="margin-top: 2rem;">
+      <p>"When I thought about it, it actually makes sense — just look at how many people live in New York City compared to London and Stockholm. The scope and scale of the impact can be larger."</p>
+      <cite>— Prof. Fei Gao, Cornell University, December 2025 (npj Clean Air)</cite>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <p style="font-family: var(--serif); font-size: 1.1rem; opacity: 0.9; margin-bottom: 1rem;">NYC Congestion Pricing — Academic Research Overview</p>
+  <p>Data sourced from: MTA, Governor Hochul's Office, NBER Working Paper 33584, Cornell University (npj Clean Air), Regional Plan Association, NYC DOH, NYC EDC, NYS Dept. of Labor, Colliers, placer.ai</p>
+  <p style="margin-top: 0.5rem;">Compiled Spring 2026 · All figures reflect Year 1 program data (Jan 5, 2025 – Jan 5, 2026)</p>
+</footer>
+
+<script>
+// ---- Chart defaults ----
+Chart.defaults.font.family = "'JetBrains Mono', monospace";
+Chart.defaults.font.size = 11;
+Chart.defaults.color = '#2a3a4a';
+
+const COLORS = {
+  red: '#c0392b',
+  blue: '#2980b9',
+  green: '#16a085',
+  gold: '#b8860b',
+  ink: '#0f1923',
+  light: '#e8e2d5',
+};
+
+// ---- Traffic Chart ----
+new Chart(document.getElementById('trafficChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'],
+    datasets: [
+      {
+        label: '2024 Baseline (avg. daily vehicles, thousands)',
+        data: [583,583,583,583,583,583,583,583,583,583,583],
+        backgroundColor: 'rgba(200,191,168,0.4)',
+        borderColor: '#c8bfa8',
+        borderWidth: 1,
+        type: 'line',
+        pointRadius: 0,
+        fill: false,
+      },
+      {
+        label: '2025 Daily Entries (thousands)',
+        data: [510, 505, 507, 512, 516, 518, 516, 513, 510, 508, 509],
+        backgroundColor: COLORS.blue + 'cc',
+        borderColor: COLORS.blue,
+        borderWidth: 1,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12 } } },
+    scales: {
+      y: { beginAtZero: false, min: 470, grid: { color: '#e8e2d5' } },
+      x: { grid: { display: false } }
+    }
+  }
+});
+
+// ---- Safety Chart ----
+new Chart(document.getElementById('safetyChart'), {
+  type: 'bar',
+  data: {
+    labels: ['CRZ Crashes', 'Traffic Injuries', 'Citywide Traffic Deaths', 'Noise Complaints', 'Holland Tunnel Delays'],
+    datasets: [{
+      label: '% Change vs. 2024',
+      data: [-7, -8, -19, -23, -65],
+      backgroundColor: [COLORS.green+'cc', COLORS.green+'99', COLORS.green+'cc', COLORS.blue+'aa', COLORS.red+'cc'],
+      borderColor: [COLORS.green, COLORS.green, COLORS.green, COLORS.blue, COLORS.red],
+      borderWidth: 1,
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { max: 0, min: -75, grid: { color: '#e8e2d5' }, ticks: { callback: v => v + '%' } },
+      y: { grid: { display: false } }
+    }
+  }
+});
+
+// ---- Air Quality Chart ----
+new Chart(document.getElementById('airChart'), {
+  type: 'bar',
+  data: {
+    labels: ['NYC (Jan–Jun 2025)', 'Stockholm (2006–2010)', 'London (2019–2022)'],
+    datasets: [{
+      label: 'PM2.5 Reduction (%)',
+      data: [22, 10, 7],
+      backgroundColor: [COLORS.green+'cc', COLORS.blue+'88', COLORS.gold+'88'],
+      borderColor: [COLORS.green, COLORS.blue, COLORS.gold],
+      borderWidth: 2,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, max: 28, ticks: { callback: v => v + '%' }, grid: { color: '#e8e2d5' } },
+      x: { grid: { display: false } }
+    }
+  }
+});
+
+// ---- Revenue Chart ----
+new Chart(document.getElementById('revenueChart'), {
+  type: 'line',
+  data: {
+    labels: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec (est.)'],
+    datasets: [{
+      label: 'Net Monthly Revenue ($M)',
+      data: [48.6, 44, 58.4, 56.7, 52, 50, 48, 50, 46, 47, 48, 49],
+      backgroundColor: COLORS.gold + '33',
+      borderColor: COLORS.gold,
+      borderWidth: 2.5,
+      fill: true,
+      tension: 0.35,
+      pointRadius: 4,
+      pointBackgroundColor: COLORS.gold,
+    },{
+      label: 'Monthly Target ($41.6M)',
+      data: Array(12).fill(41.6),
+      borderColor: COLORS.red,
+      borderWidth: 1.5,
+      borderDash: [6,4],
+      pointRadius: 0,
+      fill: false,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12 } } },
+    scales: {
+      y: { beginAtZero: false, min: 30, max: 70, ticks: { callback: v => '$' + v + 'M' }, grid: { color: '#e8e2d5' } },
+      x: { grid: { display: false } }
+    }
+  }
+});
+
+// ---- Economic Chart ----
+new Chart(document.getElementById('econChart'), {
+  type: 'bar',
+  data: {
+    labels: ['CRZ Visitor Traffic', 'Office Leasing (Q3)', 'Private Employment', 'National Employment (ref)', 'Broadway Sales'],
+    datasets: [{
+      label: 'YoY % Change (2025)',
+      data: [2.4, 9.2, 2.0, 0.9, 4.5],
+      backgroundColor: [COLORS.blue+'cc', COLORS.blue+'aa', COLORS.green+'cc', COLORS.light, COLORS.gold+'cc'],
+      borderColor: [COLORS.blue, COLORS.blue, COLORS.green, '#c8bfa8', COLORS.gold],
+      borderWidth: 1.5,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, ticks: { callback: v => '+' + v + '%' }, grid: { color: '#e8e2d5' } },
+      x: { grid: { display: false } }
+    }
+  }
+});
+
+// ---- Global comparison chart ----
+new Chart(document.getElementById('globalChart'), {
+  type: 'radar',
+  data: {
+    labels: ['PM2.5 Reduction', 'Revenue vs. Target', 'Traffic Volume Reduction', 'Speed Improvement', 'Safety Improvement'],
+    datasets: [
+      {
+        label: 'NYC (2025)',
+        data: [22, 110, 11, 15, 19],
+        backgroundColor: COLORS.red + '33',
+        borderColor: COLORS.red,
+        borderWidth: 2,
+        pointBackgroundColor: COLORS.red,
+      },
+      {
+        label: 'London (Stockholm-era avg.)',
+        data: [7, 100, 18, 20, 14],
+        backgroundColor: COLORS.blue + '22',
+        borderColor: COLORS.blue,
+        borderWidth: 1.5,
+        borderDash: [4,3],
+        pointBackgroundColor: COLORS.blue,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } },
+    scales: {
+      r: {
+        beginAtZero: true,
+        max: 120,
+        ticks: { display: false },
+        grid: { color: '#e8e2d5' },
+        pointLabels: { font: { size: 10 } }
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>

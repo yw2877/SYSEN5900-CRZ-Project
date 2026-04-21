@@ -6,14 +6,20 @@ from functools import lru_cache
 from pathlib import Path
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from shiny import App, reactive, render, ui
 from shinywidgets import output_widget, render_widget
 
 BASE_DIR = Path(__file__).resolve().parent
-ALL_BUS_CSV = BASE_DIR / "MTA_Bus_Speeds__Beginning_2015_20260309.csv"
-CBD_BUS_CSV = BASE_DIR / "MTA_Central_Business_District_Bus_Speeds__Beginning_2023_20260309.csv"
-TRAFFIC_CSV = BASE_DIR / "Daily_Traffic_on_MTA_Bridges_&_Tunnels_20260406.csv"
+ORIGINAL_DIR = BASE_DIR / "Dashboard Yixuan Wang&Sijin Li Dashboard"
+ALL_BUS_CSV = ORIGINAL_DIR / "MTA_Bus_Speeds__Beginning_2015_20260309.csv"
+CBD_BUS_CSV = ORIGINAL_DIR / "MTA_Central_Business_District_Bus_Speeds__Beginning_2023_20260309.csv"
+TRAFFIC_CSV = ORIGINAL_DIR / "Daily_Traffic_on_MTA_Bridges_&_Tunnels_20260406.csv"
 SUBWAY_CSV = BASE_DIR / "weekly_aggregated_mta.csv"
+RESEARCH_DIR = BASE_DIR / "Dashboard Jiashuo Xu"
+RESEARCH_METRICS_CSV = RESEARCH_DIR / "nyc_congestion_pricing_data.csv"
+RESEARCH_REVENUE_CSV = RESEARCH_DIR / "toll_revenue_2025.csv"
+RESEARCH_TRAFFIC_VOLUME_CSV = RESEARCH_DIR / "traffic_volume_2025.csv"
 
 DEFAULT_CUTOFF_DATE = date(2025, 1, 5)
 DEFAULT_WINDOW_MONTHS = 3
@@ -50,6 +56,17 @@ SUBWAY_BOROUGH_CHOICES = {
     "Brooklyn": "Brooklyn",
     "Manhattan": "Manhattan",
     "Queens": "Queens",
+}
+RESEARCH_COLORS = {
+    "ink": "#14213d",
+    "ink_light": "#5c677d",
+    "paper": "#f5f3ee",
+    "paper_dark": "#e8eef5",
+    "accent": "#e76f51",
+    "blue": "#457b9d",
+    "green": "#2a9d8f",
+    "gold": "#f4a261",
+    "rule": "#a0aab4",
 }
 
 
@@ -1773,6 +1790,625 @@ def subway_context_sentence(peak_choice: str, borough_choice: str) -> str:
     )
 
 
+@lru_cache(maxsize=1)
+def load_research_metrics_raw() -> pd.DataFrame:
+    if not RESEARCH_METRICS_CSV.exists():
+        raise FileNotFoundError(f"Missing file: {RESEARCH_METRICS_CSV.name}")
+
+    raw = pd.read_csv(RESEARCH_METRICS_CSV, dtype=str)
+    df = normalize_columns(raw)
+    required = {
+        "category",
+        "metric",
+        "period",
+        "value",
+        "unit",
+        "comparison",
+        "comparison_value",
+        "comparison_unit",
+        "source",
+        "notes",
+    }
+    if not required.issubset(df.columns):
+        raise ValueError("Research metrics CSV is missing one or more required columns.")
+
+    out = df.copy()
+    for col in required:
+        out[col] = out[col].fillna("").astype(str).str.strip()
+    out["value_num"] = to_numeric_clean(out["value"])
+    out["comparison_value_num"] = to_numeric_clean(out["comparison_value"])
+    return out.reset_index(drop=True)
+
+
+@lru_cache(maxsize=1)
+def load_research_traffic_volume_raw() -> pd.DataFrame:
+    if not RESEARCH_TRAFFIC_VOLUME_CSV.exists():
+        raise FileNotFoundError(f"Missing file: {RESEARCH_TRAFFIC_VOLUME_CSV.name}")
+
+    raw = pd.read_csv(RESEARCH_TRAFFIC_VOLUME_CSV, dtype=str)
+    df = normalize_columns(raw)
+    required = {
+        "month",
+        "month_num",
+        "baseline_2024_daily_thousands",
+        "crz_2025_daily_thousands",
+        "daily_reduction_thousands",
+        "reduction_pct",
+        "vehicles_kept_out_millions",
+    }
+    if not required.issubset(df.columns):
+        raise ValueError("Research traffic CSV is missing one or more required columns.")
+
+    out = df.copy()
+    out["month_num"] = to_numeric_clean(out["month_num"])
+    numeric_cols = [
+        "baseline_2024_daily_thousands",
+        "crz_2025_daily_thousands",
+        "daily_reduction_thousands",
+        "reduction_pct",
+        "vehicles_kept_out_millions",
+    ]
+    for col in numeric_cols:
+        out[col] = to_numeric_clean(out[col])
+    out["month_short"] = out["month"].astype(str).str.slice(0, 3)
+    return out.sort_values("month_num").reset_index(drop=True)
+
+
+@lru_cache(maxsize=1)
+def load_research_revenue_raw() -> pd.DataFrame:
+    if not RESEARCH_REVENUE_CSV.exists():
+        raise FileNotFoundError(f"Missing file: {RESEARCH_REVENUE_CSV.name}")
+
+    raw = pd.read_csv(RESEARCH_REVENUE_CSV, dtype=str)
+    df = normalize_columns(raw)
+    required = {
+        "month",
+        "month_num",
+        "net_revenue_millions",
+        "monthly_target_millions",
+        "above_below_target_millions",
+        "cumulative_revenue_millions",
+        "cumulative_target_millions",
+        "met_target",
+        "notes",
+    }
+    if not required.issubset(df.columns):
+        raise ValueError("Research revenue CSV is missing one or more required columns.")
+
+    out = df.copy()
+    out["month_num"] = to_numeric_clean(out["month_num"])
+    numeric_cols = [
+        "net_revenue_millions",
+        "monthly_target_millions",
+        "above_below_target_millions",
+        "cumulative_revenue_millions",
+        "cumulative_target_millions",
+    ]
+    for col in numeric_cols:
+        out[col] = to_numeric_clean(out[col])
+    out["month_short"] = out["month"].astype(str).str.slice(0, 3)
+    return out.sort_values("month_num").reset_index(drop=True)
+
+
+def research_metric_row(
+    metrics_df: pd.DataFrame,
+    category: str,
+    metric: str,
+    period: str | None = None,
+) -> pd.Series | None:
+    mask = (metrics_df["category"] == category) & (metrics_df["metric"] == metric)
+    if period is not None:
+        mask &= metrics_df["period"] == period
+    matches = metrics_df[mask]
+    if matches.empty:
+        return None
+    return matches.iloc[0]
+
+
+def research_metric_text(row: pd.Series | None, fallback: str = "N/A") -> str:
+    if row is None:
+        return fallback
+    value = str(row.get("value", "")).strip()
+    return value or fallback
+
+
+def research_metric_number(row: pd.Series | None) -> float | None:
+    if row is None:
+        return None
+    value = row.get("value_num")
+    if pd.isna(value):
+        return None
+    return float(value)
+
+
+def research_metric_display(row: pd.Series | None, use_abs: bool = False) -> str:
+    if row is None:
+        return "N/A"
+
+    value_num = research_metric_number(row)
+    unit = str(row.get("unit", "")).strip()
+    if value_num is not None:
+        value_num = abs(value_num) if use_abs else value_num
+        if unit == "%":
+            return f"{value_num:.1f}%" if not float(value_num).is_integer() else f"{value_num:.0f}%"
+        if unit == "million USD":
+            return format_compact_millions(value_num)
+        if unit:
+            return f"{value_num:,.1f} {unit}" if not float(value_num).is_integer() else f"{value_num:,.0f} {unit}"
+        return f"{value_num:,.1f}" if not float(value_num).is_integer() else f"{value_num:,.0f}"
+
+    text = research_metric_text(row)
+    if unit and unit not in text:
+        spacer = "" if unit.startswith("/") or unit == "%" else " "
+        return f"{text}{spacer}{unit}"
+    return text
+
+
+def format_compact_millions(value: float | None) -> str:
+    if value is None:
+        return "N/A"
+    abs_value = abs(value)
+    if abs_value >= 1000:
+        return f"${value / 1000:.0f}B"
+    if float(value).is_integer():
+        return f"${value:.0f}M"
+    return f"${value:.1f}M"
+
+
+def build_research_empty_figure(title: str, message: str):
+    fig = go.Figure()
+    fig.update_layout(
+        template="plotly_white",
+        title=title,
+        margin=dict(l=20, r=20, t=70, b=20),
+        height=320,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(color=RESEARCH_COLORS["ink_light"]),
+    )
+    fig.add_annotation(
+        text=message,
+        x=0.5,
+        y=0.5,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+    )
+    return fig
+
+
+def build_research_traffic_chart(monthly_df: pd.DataFrame):
+    if monthly_df.empty:
+        return build_research_empty_figure(
+            "Average Daily Vehicle Entries to CRZ",
+            "Traffic volume data is not available.",
+        )
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            x=monthly_df["month_short"],
+            y=monthly_df["crz_2025_daily_thousands"],
+            name="2025 Daily Entries (thousands)",
+            marker_color="rgba(41, 128, 185, 0.82)",
+            marker_line_color=RESEARCH_COLORS["blue"],
+            marker_line_width=1,
+            hovertemplate="%{x}<br>%{y:,.0f}k vehicles/day<extra></extra>",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=monthly_df["month_short"],
+            y=monthly_df["baseline_2024_daily_thousands"],
+            name="2024 Baseline (avg. daily vehicles, thousands)",
+            mode="lines",
+            line=dict(color=RESEARCH_COLORS["rule"], width=2),
+            hovertemplate="%{x}<br>%{y:,.0f}k baseline<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        template="plotly_white",
+        title="Average Daily Vehicle Entries to CRZ",
+        margin=dict(l=20, r=20, t=70, b=20),
+        height=320,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(color=RESEARCH_COLORS["ink_light"]),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.18,
+            xanchor="center",
+            x=0.5,
+        ),
+    )
+    fig.update_yaxes(range=[470, 600], title="", gridcolor=RESEARCH_COLORS["paper_dark"])
+    fig.update_xaxes(title="", showgrid=False)
+    return fig
+
+
+def build_research_safety_chart(metrics_df: pd.DataFrame):
+    rows = [
+        ("CRZ Crashes", "Safety", "Crashes in CRZ", RESEARCH_COLORS["green"]),
+        ("Traffic Injuries", "Safety", "Traffic injuries in CRZ", RESEARCH_COLORS["green"]),
+        ("Citywide Traffic Deaths", "Safety", "Citywide traffic deaths", RESEARCH_COLORS["green"]),
+        ("Noise Complaints", "Safety", "Noise complaints (NYC 311)", RESEARCH_COLORS["blue"]),
+        ("Holland Tunnel Delays", "Speed", "Holland Tunnel rush hour delay reduction", RESEARCH_COLORS["accent"]),
+    ]
+    plot_rows: list[dict[str, object]] = []
+    for label, category, metric, color in rows:
+        row = research_metric_row(metrics_df, category, metric)
+        value = research_metric_number(row)
+        if value is None:
+            continue
+        plot_rows.append({"label": label, "value": value, "color": color})
+
+    if not plot_rows:
+        return build_research_empty_figure(
+            "Safety & Quality-of-Life Metrics (% Change, 2025 vs. 2024)",
+            "Safety metrics are not available.",
+        )
+
+    plot_df = pd.DataFrame(plot_rows)
+    fig = go.Figure(
+        go.Bar(
+            x=plot_df["value"],
+            y=plot_df["label"],
+            orientation="h",
+            marker_color=plot_df["color"],
+            hovertemplate="%{y}<br>%{x:.0f}%<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        template="plotly_white",
+        title="Safety & Quality-of-Life Metrics (% Change, 2025 vs. 2024)",
+        margin=dict(l=20, r=20, t=70, b=20),
+        height=320,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(color=RESEARCH_COLORS["ink_light"]),
+    )
+    fig.update_xaxes(range=[-75, 0], ticksuffix="%", gridcolor=RESEARCH_COLORS["paper_dark"])
+    fig.update_yaxes(title="", autorange="reversed", showgrid=False)
+    return fig
+
+
+def build_research_air_chart(metrics_df: pd.DataFrame):
+    plot_rows = [
+        (
+            "NYC (Jan-Jun 2025)",
+            abs(research_metric_number(research_metric_row(metrics_df, "Air Quality", "PM2.5 reduction in CRZ")) or 0),
+            RESEARCH_COLORS["green"],
+        ),
+        (
+            "Stockholm (2006-2010)",
+            abs(research_metric_number(research_metric_row(metrics_df, "Air Quality", "PM2.5 reduction Stockholm benchmark")) or 0),
+            RESEARCH_COLORS["blue"],
+        ),
+        (
+            "London (2019-2022)",
+            abs(research_metric_number(research_metric_row(metrics_df, "Air Quality", "PM2.5 reduction London benchmark")) or 0),
+            RESEARCH_COLORS["gold"],
+        ),
+    ]
+    plot_df = pd.DataFrame(plot_rows, columns=["label", "value", "color"])
+    if plot_df["value"].eq(0).all():
+        return build_research_empty_figure(
+            "PM2.5 Reduction: NYC vs. Global Peers",
+            "Air quality metrics are not available.",
+        )
+
+    fig = go.Figure(
+        go.Bar(
+            x=plot_df["label"],
+            y=plot_df["value"],
+            marker_color=plot_df["color"],
+            hovertemplate="%{x}<br>%{y:.0f}% reduction<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        template="plotly_white",
+        title="PM2.5 Reduction: NYC vs. Global Peers",
+        margin=dict(l=20, r=20, t=70, b=20),
+        height=320,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(color=RESEARCH_COLORS["ink_light"]),
+        showlegend=False,
+    )
+    fig.update_yaxes(range=[0, 28], ticksuffix="%", gridcolor=RESEARCH_COLORS["paper_dark"])
+    fig.update_xaxes(showgrid=False, title="")
+    return fig
+
+
+def build_research_revenue_chart(monthly_df: pd.DataFrame):
+    if monthly_df.empty:
+        return build_research_empty_figure(
+            "Monthly Net Toll Revenue, 2025 (Millions USD)",
+            "Revenue data is not available.",
+        )
+
+    plot_df = monthly_df.copy()
+    plot_df.loc[plot_df["month_num"] == 12, "month_short"] = "Dec (est.)"
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=plot_df["month_short"],
+            y=plot_df["net_revenue_millions"],
+            name="Net Monthly Revenue ($M)",
+            mode="lines+markers",
+            line=dict(color=RESEARCH_COLORS["gold"], width=3),
+            marker=dict(size=7, color=RESEARCH_COLORS["gold"]),
+            fill="tozeroy",
+            fillcolor="rgba(184, 134, 11, 0.15)",
+            hovertemplate="%{x}<br>$%{y:.1f}M<extra></extra>",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=plot_df["month_short"],
+            y=plot_df["monthly_target_millions"],
+            name="Monthly Target ($41.6M)",
+            mode="lines",
+            line=dict(color=RESEARCH_COLORS["accent"], width=2, dash="dash"),
+            hovertemplate="%{x}<br>$%{y:.1f}M target<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        template="plotly_white",
+        title="Monthly Net Toll Revenue, 2025 (Millions USD)",
+        margin=dict(l=20, r=20, t=70, b=20),
+        height=320,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(color=RESEARCH_COLORS["ink_light"]),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.18,
+            xanchor="center",
+            x=0.5,
+        ),
+    )
+    fig.update_yaxes(range=[30, 70], tickprefix="$", ticksuffix="M", gridcolor=RESEARCH_COLORS["paper_dark"])
+    fig.update_xaxes(showgrid=False, title="")
+    return fig
+
+
+def build_research_economy_chart(metrics_df: pd.DataFrame):
+    private_emp_row = research_metric_row(metrics_df, "Economy", "Private sector employment NYC")
+    plot_rows = [
+        (
+            "CRZ Visitor Traffic",
+            research_metric_number(research_metric_row(metrics_df, "Economy", "CRZ visitor foot traffic")),
+            RESEARCH_COLORS["blue"],
+        ),
+        (
+            "Office Leasing (Q3)",
+            research_metric_number(research_metric_row(metrics_df, "Economy", "Office leasing activity Q3")),
+            RESEARCH_COLORS["blue"],
+        ),
+        (
+            "Private Employment",
+            research_metric_number(private_emp_row),
+            RESEARCH_COLORS["green"],
+        ),
+        (
+            "National Rate",
+            None if private_emp_row is None or pd.isna(private_emp_row.get("comparison_value_num")) else float(private_emp_row["comparison_value_num"]),
+            RESEARCH_COLORS["rule"],
+        ),
+    ]
+    plot_df = pd.DataFrame(plot_rows, columns=["label", "value", "color"]).dropna(subset=["value"])
+    if plot_df.empty:
+        return build_research_empty_figure(
+            "Selected Economic Indicators, Manhattan 2025",
+            "Economic indicators are not available.",
+        )
+
+    fig = go.Figure(
+        go.Bar(
+            x=plot_df["label"],
+            y=plot_df["value"],
+            marker_color=plot_df["color"],
+            hovertemplate="%{x}<br>%{y:.1f}%<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        template="plotly_white",
+        title="Selected Economic Indicators, Manhattan 2025",
+        margin=dict(l=20, r=20, t=70, b=20),
+        height=320,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(color=RESEARCH_COLORS["ink_light"]),
+        showlegend=False,
+    )
+    fig.update_yaxes(ticksuffix="%", gridcolor=RESEARCH_COLORS["paper_dark"])
+    fig.update_xaxes(showgrid=False, title="")
+    return fig
+
+
+def build_research_global_chart():
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatterpolar(
+            r=[22, 110, 11, 15, 19],
+            theta=[
+                "PM2.5 Reduction",
+                "Revenue vs. Target",
+                "Traffic Volume Reduction",
+                "Speed Improvement",
+                "Safety Improvement",
+            ],
+            fill="toself",
+            name="NYC (2025)",
+            line=dict(color=RESEARCH_COLORS["accent"], width=2),
+            fillcolor="rgba(192, 57, 43, 0.18)",
+        )
+    )
+    fig.add_trace(
+        go.Scatterpolar(
+            r=[7, 100, 18, 20, 14],
+            theta=[
+                "PM2.5 Reduction",
+                "Revenue vs. Target",
+                "Traffic Volume Reduction",
+                "Speed Improvement",
+                "Safety Improvement",
+            ],
+            fill="toself",
+            name="London / Stockholm-era avg.",
+            line=dict(color=RESEARCH_COLORS["blue"], width=2, dash="dash"),
+            fillcolor="rgba(41, 128, 185, 0.08)",
+        )
+    )
+    fig.update_layout(
+        template="plotly_white",
+        title="Global Congestion Pricing: Comparative PM2.5 Reduction",
+        margin=dict(l=20, r=20, t=70, b=20),
+        height=360,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(color=RESEARCH_COLORS["ink_light"]),
+        legend=dict(orientation="h", yanchor="top", y=-0.16, xanchor="center", x=0.5),
+        polar=dict(
+            bgcolor="white",
+            radialaxis=dict(visible=True, range=[0, 120], showticklabels=False, gridcolor=RESEARCH_COLORS["paper_dark"]),
+            angularaxis=dict(gridcolor=RESEARCH_COLORS["paper_dark"]),
+        ),
+    )
+    return fig
+
+
+def make_research_stat_cell(value: str, label: str):
+    return ui.div(
+        ui.div(value, class_="research-stat-num"),
+        ui.div(label, class_="research-stat-label"),
+        class_="research-stat-cell",
+    )
+
+
+def make_research_metric_card(label: str, value: str, body: str, accent_class: str):
+    return ui.div(
+        ui.div(label, class_="research-card-label"),
+        ui.div(value, class_="research-card-num"),
+        ui.p(body, class_="research-card-copy"),
+        class_=f"research-metric-card {accent_class}",
+    )
+
+
+def make_research_pullquote(quote: str, cite: str):
+    return ui.div(
+        ui.p(f'"{quote}"', class_="research-pullquote-text"),
+        ui.div(cite, class_="research-pullquote-cite"),
+        class_="research-pullquote",
+    )
+
+
+def make_research_bar_row(label: str, value_text: str, width_pct: float, fill_class: str = ""):
+    fill_class_name = "research-bar-fill" if not fill_class else f"research-bar-fill {fill_class}"
+    return ui.div(
+        ui.div(
+            ui.tags.span(label),
+            ui.tags.span(value_text),
+            class_="research-bar-row-label",
+        ),
+        ui.div(
+            ui.div(
+                style=f"width: {max(0.0, min(width_pct, 100.0)):.1f}%;",
+                class_=fill_class_name,
+            ),
+            class_="research-bar-track",
+        ),
+    )
+
+
+def make_overview_kpi_card(
+    title: str,
+    headline: str,
+    subhead: str,
+    metrics: list[tuple[str, str]],
+    accent_class: str,
+):
+    metric_nodes = [
+        ui.div(
+            ui.div(label, class_="kpi-metric-label"),
+            ui.div(value, class_="kpi-metric-value"),
+            class_="kpi-metric",
+        )
+        for label, value in metrics
+    ]
+    return ui.column(
+        3,
+        ui.card(
+            ui.div(title, class_="kpi-title"),
+            ui.div(
+                ui.div(
+                    ui.div(headline, class_="kpi-delta"),
+                    ui.div(subhead, class_="kpi-pct"),
+                    class_="kpi-topline",
+                ),
+                ui.div(*metric_nodes, class_="kpi-grid"),
+                class_="kpi-body",
+            ),
+            class_=f"kpi-card {accent_class}",
+        ),
+    )
+
+
+def build_overview_speed_chart(metrics_df: pd.DataFrame):
+    rows = [
+        ("CBD Overall", research_metric_number(research_metric_row(metrics_df, "Speed", "CBD overall speed improvement")), RESEARCH_COLORS["accent"]),
+        ("Highways", research_metric_number(research_metric_row(metrics_df, "Speed", "Highway speed improvement")), RESEARCH_COLORS["green"]),
+        ("Arterial Roads", research_metric_number(research_metric_row(metrics_df, "Speed", "Arterial road speed improvement")), RESEARCH_COLORS["blue"]),
+        ("Local Roads", research_metric_number(research_metric_row(metrics_df, "Speed", "Local road speed improvement")), RESEARCH_COLORS["gold"]),
+        ("Weekend Evenings", research_metric_number(research_metric_row(metrics_df, "Speed", "Weekend evening speed improvement (3-9PM)")), RESEARCH_COLORS["accent"]),
+    ]
+    plot_df = pd.DataFrame(rows, columns=["label", "value", "color"]).dropna(subset=["value"])
+    if plot_df.empty:
+        return build_research_empty_figure("Speed Gains by Road Type", "Speed comparison data is not available.")
+
+    fig = go.Figure(
+        go.Bar(
+            x=plot_df["value"],
+            y=plot_df["label"],
+            orientation="h",
+            marker_color=plot_df["color"],
+            text=[f"+{v:.0f}%" for v in plot_df["value"]],
+            textposition="outside",
+            hovertemplate="%{y}<br>%{x:.0f}%<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        template="plotly_white",
+        title="Speed Gains by Road Type",
+        margin=dict(l=20, r=20, t=70, b=20),
+        height=320,
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(color=RESEARCH_COLORS["ink_light"]),
+        showlegend=False,
+    )
+    fig.update_xaxes(range=[0, 30], ticksuffix="%", gridcolor=RESEARCH_COLORS["paper_dark"])
+    fig.update_yaxes(title="", autorange="reversed", showgrid=False)
+    return fig
+
+
+def build_hero_panel(title: str, subtitle: str, credit: str):
+    return ui.div(
+        ui.div(
+            ui.div("MANHATTAN CONGESTION RELIEF ZONE", class_="hero-kicker"),
+            ui.div(credit, class_="hero-credit"),
+            class_="hero-toprow",
+        ),
+        ui.div(title, class_="hero-title"),
+        ui.p(subtitle, class_="hero-subtitle"),
+        class_="hero-panel",
+    )
+
+
 def build_shared_styles():
     return ui.tags.head(
         ui.tags.style(
@@ -1810,12 +2446,26 @@ def build_shared_styles():
               box-shadow: 0 20px 42px rgba(20, 33, 61, 0.18);
               margin-bottom: 18px;
             }
+            .hero-toprow {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              gap: 16px;
+              margin-bottom: 10px;
+            }
             .hero-kicker {
               font-size: 0.82rem;
               letter-spacing: 0.18em;
               text-transform: uppercase;
               opacity: 0.82;
-              margin-bottom: 10px;
+              margin-bottom: 0;
+            }
+            .hero-credit {
+              font-size: 0.82rem;
+              font-weight: 600;
+              opacity: 0.88;
+              text-align: right;
+              white-space: nowrap;
             }
             .hero-title {
               font-family: "Aptos Display", "Trebuchet MS", sans-serif;
@@ -1977,12 +2627,422 @@ def build_shared_styles():
               border-color: transparent;
               box-shadow: 0 10px 22px rgba(20, 33, 61, 0.16);
             }
+            .research-shell {
+              max-width: 1480px;
+              margin: 0 auto;
+              padding: 24px 10px 48px;
+              color: #0f1923;
+            }
+            .research-shell p,
+            .research-shell li,
+            .research-shell td,
+            .research-shell th {
+              font-family: Georgia, "Times New Roman", serif;
+            }
+            .research-intro-note {
+              margin-bottom: 16px;
+              background: rgba(255, 255, 255, 0.76);
+              border: 1px solid rgba(15, 25, 35, 0.08);
+              border-radius: 16px;
+              padding: 12px 16px;
+              color: #536171;
+              line-height: 1.5;
+            }
+            .research-hero {
+              background: #101924;
+              color: #f4f0e8;
+              border-radius: 28px 28px 0 0;
+              overflow: hidden;
+              position: relative;
+              border: 1px solid rgba(15, 25, 35, 0.12);
+              border-bottom: none;
+            }
+            .research-hero::before {
+              content: "";
+              position: absolute;
+              inset: 0;
+              background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 47px,
+                rgba(255, 255, 255, 0.035) 47px,
+                rgba(255, 255, 255, 0.035) 48px
+              );
+              pointer-events: none;
+            }
+            .research-hero-inner {
+              position: relative;
+              max-width: 1120px;
+              margin: 0 auto;
+              padding: 72px 44px 54px;
+            }
+            .research-hero-label,
+            .research-hero-meta-label,
+            .research-stat-label,
+            .research-section-label,
+            .research-chart-source,
+            .research-card-label,
+            .research-pullquote-cite,
+            .research-footer-note,
+            .research-timeline-year,
+            .research-compare-col h4,
+            .research-table th {
+              font-family: Consolas, "Courier New", monospace;
+            }
+            .research-hero-label {
+              font-size: 0.72rem;
+              letter-spacing: 0.18em;
+              text-transform: uppercase;
+              color: #c0392b;
+              margin-bottom: 18px;
+            }
+            .research-hero-title {
+              font-family: Georgia, "Times New Roman", serif;
+              font-size: clamp(2.8rem, 5.4vw, 5rem);
+              line-height: 0.98;
+              font-weight: 700;
+              letter-spacing: -0.04em;
+              margin-bottom: 18px;
+            }
+            .research-hero-title em {
+              color: #e8d5a3;
+              font-style: italic;
+            }
+            .research-hero-subtitle {
+              max-width: 760px;
+              font-size: 1.16rem;
+              line-height: 1.7;
+              color: rgba(244, 240, 232, 0.72);
+              margin: 0;
+            }
+            .research-hero-meta {
+              display: grid;
+              grid-template-columns: repeat(4, minmax(0, 1fr));
+              gap: 18px 26px;
+              margin-top: 34px;
+              padding-top: 18px;
+              border-top: 1px solid rgba(244, 240, 232, 0.16);
+            }
+            .research-hero-meta-label {
+              font-size: 0.66rem;
+              letter-spacing: 0.12em;
+              text-transform: uppercase;
+              color: rgba(244, 240, 232, 0.52);
+              margin-bottom: 4px;
+            }
+            .research-hero-meta-value {
+              color: rgba(244, 240, 232, 0.88);
+              font-size: 0.96rem;
+            }
+            .research-stats-band {
+              display: grid;
+              grid-template-columns: repeat(4, minmax(0, 1fr));
+              background: #c0392b;
+              border: 1px solid rgba(15, 25, 35, 0.12);
+              border-top: none;
+              border-radius: 0 0 28px 28px;
+              overflow: hidden;
+              box-shadow: 0 22px 40px rgba(15, 25, 35, 0.14);
+            }
+            .research-stat-cell {
+              padding: 26px 18px;
+              text-align: center;
+              border-right: 1px solid rgba(255, 255, 255, 0.16);
+            }
+            .research-stat-cell:last-child {
+              border-right: none;
+            }
+            .research-stat-num {
+              display: block;
+              font-family: Georgia, "Times New Roman", serif;
+              font-size: 2.8rem;
+              font-weight: 700;
+              line-height: 1;
+              color: white;
+              margin-bottom: 6px;
+            }
+            .research-stat-label {
+              font-size: 0.68rem;
+              letter-spacing: 0.12em;
+              text-transform: uppercase;
+              color: rgba(255, 255, 255, 0.86);
+            }
+            .research-section {
+              background: rgba(244, 240, 232, 0.84);
+              border: 1px solid rgba(15, 25, 35, 0.10);
+              border-radius: 28px;
+              padding: 38px 34px;
+              margin-top: 26px;
+              box-shadow: 0 14px 30px rgba(15, 25, 35, 0.08);
+            }
+            .research-section-label {
+              font-size: 0.7rem;
+              letter-spacing: 0.18em;
+              text-transform: uppercase;
+              color: #c0392b;
+              margin-bottom: 10px;
+            }
+            .research-section-title {
+              font-family: Georgia, "Times New Roman", serif;
+              font-size: 2.1rem;
+              font-weight: 700;
+              line-height: 1.12;
+              margin: 0 0 18px;
+              color: #0f1923;
+            }
+            .research-lead {
+              max-width: 760px;
+              color: #2a3a4a;
+              margin-bottom: 0;
+            }
+            .research-two-col {
+              display: grid;
+              grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+              gap: 30px;
+              align-items: start;
+            }
+            .research-three-col {
+              display: grid;
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+              gap: 18px;
+              margin-top: 22px;
+            }
+            .research-chart-card {
+              background: white;
+              border: 1px solid #c8bfa8;
+              border-top: 4px solid #0f1923;
+              border-radius: 20px;
+              padding: 18px 18px 8px;
+            }
+            .research-chart-title {
+              font-family: Georgia, "Times New Roman", serif;
+              font-size: 1.35rem;
+              font-weight: 700;
+              margin-bottom: 4px;
+            }
+            .research-chart-source {
+              font-size: 0.64rem;
+              letter-spacing: 0.1em;
+              text-transform: uppercase;
+              color: #7c838b;
+              margin-bottom: 10px;
+            }
+            .research-metric-card {
+              background: white;
+              border: 1px solid #c8bfa8;
+              border-radius: 20px;
+              padding: 22px 20px;
+              min-height: 220px;
+              position: relative;
+            }
+            .research-metric-card::before {
+              content: "";
+              position: absolute;
+              left: 0;
+              right: 0;
+              top: 0;
+              height: 4px;
+              background: #c0392b;
+              border-radius: 20px 20px 0 0;
+            }
+            .research-blue::before { background: #2980b9; }
+            .research-green::before { background: #16a085; }
+            .research-gold::before { background: #b8860b; }
+            .research-card-label {
+              font-size: 0.7rem;
+              letter-spacing: 0.14em;
+              text-transform: uppercase;
+              color: #8a8f95;
+              margin-bottom: 12px;
+            }
+            .research-card-num {
+              font-family: Georgia, "Times New Roman", serif;
+              font-size: 2.45rem;
+              line-height: 1;
+              font-weight: 700;
+              color: #0f1923;
+              margin-bottom: 12px;
+            }
+            .research-card-copy {
+              margin: 0;
+              color: #2a3a4a;
+              line-height: 1.62;
+            }
+            .research-rule {
+              text-align: center;
+              color: #a39b8b;
+              letter-spacing: 0.5em;
+              margin: 24px 0;
+            }
+            .research-pullquote {
+              margin-top: 20px;
+              border-left: 4px solid #c0392b;
+              background: #e8e2d5;
+              padding: 16px 18px;
+              border-radius: 0 18px 18px 0;
+            }
+            .research-pullquote-text {
+              margin: 0 0 8px;
+              font-size: 1.16rem;
+              line-height: 1.55;
+              color: #0f1923;
+              font-style: italic;
+            }
+            .research-pullquote-cite {
+              font-size: 0.68rem;
+              letter-spacing: 0.08em;
+              text-transform: uppercase;
+              color: #c0392b;
+            }
+            .research-timeline {
+              display: flex;
+              flex-direction: column;
+              gap: 12px;
+              margin-top: 8px;
+            }
+            .research-timeline-item {
+              display: grid;
+              grid-template-columns: 110px 1fr;
+              gap: 14px;
+              padding-bottom: 12px;
+              border-bottom: 1px solid rgba(15, 25, 35, 0.08);
+            }
+            .research-timeline-item:last-child {
+              border-bottom: none;
+              padding-bottom: 0;
+            }
+            .research-timeline-year {
+              font-size: 0.72rem;
+              letter-spacing: 0.12em;
+              text-transform: uppercase;
+              color: #c0392b;
+              padding-top: 3px;
+            }
+            .research-timeline-text {
+              color: #2a3a4a;
+              line-height: 1.58;
+            }
+            .research-table {
+              width: 100%;
+              border-collapse: collapse;
+              overflow: hidden;
+              border-radius: 18px;
+              margin-top: 18px;
+              background: white;
+            }
+            .research-table th {
+              background: #0f1923;
+              color: #f4f0e8;
+              font-size: 0.68rem;
+              letter-spacing: 0.1em;
+              text-transform: uppercase;
+              padding: 14px 12px;
+            }
+            .research-table td {
+              padding: 12px 12px;
+              border-bottom: 1px solid #e8e2d5;
+              color: #2a3a4a;
+              vertical-align: top;
+            }
+            .research-table tr:last-child td {
+              border-bottom: none;
+            }
+            .research-footer-note {
+              margin-top: 10px;
+              font-size: 0.66rem;
+              letter-spacing: 0.08em;
+              text-transform: uppercase;
+              color: #7c838b;
+            }
+            .research-bar-stack {
+              display: flex;
+              flex-direction: column;
+              gap: 14px;
+            }
+            .research-bar-row-label {
+              display: flex;
+              justify-content: space-between;
+              gap: 16px;
+              font-family: Consolas, "Courier New", monospace;
+              font-size: 0.8rem;
+              color: #0f1923;
+              margin-bottom: 6px;
+            }
+            .research-bar-track {
+              height: 10px;
+              background: #e8e2d5;
+              border-radius: 999px;
+              overflow: hidden;
+            }
+            .research-bar-fill {
+              height: 100%;
+              background: #0f1923;
+              border-radius: 999px;
+            }
+            .research-bar-fill.blue { background: #2980b9; }
+            .research-bar-fill.green { background: #16a085; }
+            .research-bar-fill.red { background: #c0392b; }
+            .research-compare-grid {
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 18px;
+              margin-top: 24px;
+            }
+            .research-compare-col {
+              background: white;
+              border: 1px solid #c8bfa8;
+              border-radius: 20px;
+              padding: 20px;
+            }
+            .research-compare-col h4 {
+              margin: 0 0 12px;
+              font-size: 0.82rem;
+              letter-spacing: 0.1em;
+              text-transform: uppercase;
+              color: #0f1923;
+            }
+            .research-compare-col ul {
+              margin: 0;
+              padding-left: 18px;
+              color: #2a3a4a;
+              line-height: 1.62;
+            }
+            .research-compare-col li + li {
+              margin-top: 10px;
+            }
             @media (max-width: 991px) {
+              .hero-toprow {
+                flex-direction: column;
+                gap: 6px;
+              }
+              .hero-credit {
+                text-align: left;
+                white-space: normal;
+              }
               .hero-title {
                 font-size: 1.8rem;
               }
               .kpi-card {
                 min-height: auto;
+              }
+              .research-hero-inner {
+                padding: 48px 24px 36px;
+              }
+              .research-hero-meta,
+              .research-stats-band {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+              }
+              .research-two-col,
+              .research-three-col,
+              .research-compare-grid {
+                grid-template-columns: 1fr;
+              }
+              .research-section {
+                padding: 28px 22px;
+              }
+              .research-timeline-item {
+                grid-template-columns: 1fr;
+                gap: 6px;
               }
             }
             """
@@ -1992,15 +3052,13 @@ def build_shared_styles():
 
 def bus_speed_page_ui():
     return ui.div(
-        ui.div(
-            ui.div("MANHATTAN CONGESTION RELIEF ZONE", class_="hero-kicker"),
-            ui.div("Bus Speed Impact Dashboard", class_="hero-title"),
-            ui.p(
+        build_hero_panel(
+            title="Bus Speed Impact Dashboard",
+            subtitle=(
                 "Local CSV analysis with KPI cards, filterable comparisons, and auto-generated manager summary. "
-                "The focus stays on before/after change around CRZ start, while the line charts show how the selected slice behaves over time.",
-                class_="hero-subtitle",
+                "The focus stays on before/after change around CRZ start, while the line charts show how the selected slice behaves over time."
             ),
-            class_="hero-panel",
+            credit="Designed by Yixuan Wang",
         ),
         ui.card(
             ui.card_header("Filters"),
@@ -2051,15 +3109,13 @@ def bus_speed_page_ui():
 
 def traffic_volume_page_ui():
     return ui.div(
-        ui.div(
-            ui.div("MANHATTAN CONGESTION RELIEF ZONE", class_="hero-kicker"),
-            ui.div("Traffic Volume Impact Dashboard", class_="hero-title"),
-            ui.p(
+        build_hero_panel(
+            title="Traffic Volume Impact Dashboard",
+            subtitle=(
                 "Daily bridge-and-tunnel counts are rolled into complete-month average daily traffic so the before/after comparison stays comparable around CRZ launch. "
-                "The default view emphasizes inbound traffic, which is the slice most directly tied to Manhattan entry demand.",
-                class_="hero-subtitle",
+                "The default view emphasizes inbound traffic, which is the slice most directly tied to Manhattan entry demand."
             ),
-            class_="hero-panel",
+            credit="Designed by Sijin Li",
         ),
         ui.card(
             ui.card_header("Filters"),
@@ -2102,15 +3158,13 @@ def traffic_volume_page_ui():
 
 def subway_ridership_page_ui():
     return ui.div(
-        ui.div(
-            ui.div("MANHATTAN CONGESTION RELIEF ZONE", class_="hero-kicker"),
-            ui.div("Subway Ridership Impact Dashboard", class_="hero-title"),
-            ui.p(
+        build_hero_panel(
+            title="Subway Ridership Impact Dashboard",
+            subtitle=(
                 "This tab folds the cloned subway-ridership project into the same CRZ dashboard shell, "
-                "so we can read transit demand alongside bus speed and traffic volume in one place.",
-                class_="hero-subtitle",
+                "so we can read transit demand alongside bus speed and traffic volume in one place."
             ),
-            class_="hero-panel",
+            credit="Designed by Kegan Lin and Jack Zhou",
         ),
         ui.card(
             ui.card_header("Filters"),
@@ -2184,6 +3238,125 @@ def subway_ridership_page_ui():
     )
 
 
+def research_overview_page_ui():
+    return ui.div(
+        build_hero_panel(
+            title="Year-One Congestion Pricing Comparison",
+            subtitle=(
+                "This tab turns the imported Dashboard Jiashuo Xu source folder into the same dashboard format as the rest of the app. "
+                "The emphasis stays on before-CRZ versus after-CRZ comparisons, with the pulled CSV files driving the headline cards and charts."
+            ),
+            credit="Designed by Jiashuo Xu",
+        ),
+        ui.card(
+            ui.card_header("Data Scope"),
+            ui.tags.ul(
+                ui.tags.li("Traffic compares 2025 CRZ vehicle entries against the pulled 2024 baseline from the cloned CSV."),
+                ui.tags.li("Speed, safety, air, and economy metrics come from the cloned overview CSV and preserve the source project's comparison windows."),
+                ui.tags.li("Revenue compares monthly 2025 net revenue against the official target so this tab stays focused on measurable deltas."),
+            ),
+            ui.div(
+                "Policy background from the HTML is kept only as supporting context; the main story here is data comparison.",
+                class_="filter-note",
+            ),
+            class_="filter-card",
+        ),
+        ui.output_ui("overview_context_note"),
+        ui.output_ui("overview_kpi_cards"),
+        ui.row(
+            ui.column(
+                7,
+                ui.card(
+                    ui.card_header("Overview Summary"),
+                    ui.output_ui("overview_summary"),
+                    class_="summary-card",
+                ),
+            ),
+            ui.column(
+                5,
+                ui.card(
+                    ui.card_header("Interpretation"),
+                    ui.output_ui("overview_so_what"),
+                    class_="summary-card",
+                ),
+            ),
+        ),
+        ui.row(
+            ui.column(
+                6,
+                ui.card(
+                    ui.card_header("Traffic Volume: 2024 Baseline vs 2025 CRZ"),
+                    output_widget("overview_traffic_chart"),
+                    class_="chart-card",
+                ),
+            ),
+            ui.column(
+                6,
+                ui.card(
+                    ui.card_header("Revenue: Actual vs Monthly Target"),
+                    output_widget("overview_revenue_chart"),
+                    class_="chart-card",
+                ),
+            ),
+        ),
+        ui.row(
+            ui.column(
+                6,
+                ui.card(
+                    ui.card_header("Speed Gains by Road Type"),
+                    output_widget("overview_speed_chart"),
+                    class_="chart-card",
+                ),
+            ),
+            ui.column(
+                6,
+                ui.card(
+                    ui.card_header("Safety & Quality-of-Life Change"),
+                    output_widget("overview_safety_chart"),
+                    class_="chart-card",
+                ),
+            ),
+        ),
+        ui.row(
+            ui.column(
+                6,
+                ui.card(
+                    ui.card_header("Air Quality Comparison"),
+                    output_widget("overview_air_chart"),
+                    class_="chart-card",
+                ),
+            ),
+            ui.column(
+                6,
+                ui.card(
+                    ui.card_header("Economic Indicators"),
+                    output_widget("overview_economy_chart"),
+                    class_="chart-card",
+                ),
+            ),
+        ),
+        ui.row(
+            ui.column(
+                6,
+                ui.card(
+                    ui.card_header("Funding Notes from the Cloned Project"),
+                    ui.output_ui("overview_funding_notes"),
+                    class_="summary-card",
+                ),
+            ),
+            ui.column(
+                6,
+                ui.card(
+                    ui.card_header("Caveats"),
+                    ui.output_ui("overview_caveats"),
+                    class_="summary-card",
+                ),
+            ),
+        ),
+        class_="dashboard-shell",
+    )
+
+
 bus_speed_server = server
 
 
@@ -2193,6 +3366,7 @@ app_ui = ui.page_fluid(
         ui.nav_panel("Bus Speed", bus_speed_page_ui()),
         ui.nav_panel("Traffic Volume", traffic_volume_page_ui()),
         ui.nav_panel("Subway Ridership", subway_ridership_page_ui()),
+        ui.nav_panel("CRZ Overview", research_overview_page_ui()),
         id="main_nav",
     ),
 )
@@ -2200,6 +3374,289 @@ app_ui = ui.page_fluid(
 
 def server(input, output, session):
     bus_speed_server(input, output, session)
+
+    @reactive.calc
+    def overview_bundle():
+        errors: list[str] = []
+
+        try:
+            metrics = load_research_metrics_raw()
+        except Exception as exc:
+            metrics = pd.DataFrame()
+            errors.append(f"Research metrics load failed: {exc}")
+
+        try:
+            traffic = load_research_traffic_volume_raw()
+        except Exception as exc:
+            traffic = pd.DataFrame()
+            errors.append(f"Research traffic CSV load failed: {exc}")
+
+        try:
+            revenue = load_research_revenue_raw()
+        except Exception as exc:
+            revenue = pd.DataFrame()
+            errors.append(f"Research revenue CSV load failed: {exc}")
+
+        return {"metrics": metrics, "traffic": traffic, "revenue": revenue, "errors": errors}
+
+    @render.ui
+    def overview_context_note():
+        bundle = overview_bundle()
+        if bundle["errors"]:
+            return ui.div(
+                "Data warning: " + " | ".join(bundle["errors"]),
+                class_="context-note",
+            )
+        return ui.div(
+            "Traffic uses the pulled 2024 baseline versus 2025 CRZ entries. Revenue uses the pulled monthly series versus the official target. "
+            "Other supporting indicators keep the comparison windows stated in the cloned project's CSV.",
+            class_="context-note",
+        )
+
+    @reactive.calc
+    def overview_story_stats():
+        metrics = overview_bundle()["metrics"]
+        traffic = overview_bundle()["traffic"]
+        revenue = overview_bundle()["revenue"]
+
+        traffic_before = None if traffic.empty else float(traffic["baseline_2024_daily_thousands"].mean())
+        traffic_after = None if traffic.empty else float(traffic["crz_2025_daily_thousands"].mean())
+        traffic_delta = None if traffic_before is None or traffic_after is None else traffic_after - traffic_before
+        traffic_pct = None if traffic_before in (None, 0) or traffic_delta is None else traffic_delta / traffic_before * 100.0
+
+        speed_before = research_metric_number(research_metric_row(metrics, "Speed", "CBD average speed before"))
+        speed_after = research_metric_number(research_metric_row(metrics, "Speed", "CBD average speed after"))
+        speed_delta = None if speed_before is None or speed_after is None else speed_after - speed_before
+        speed_pct = research_metric_number(research_metric_row(metrics, "Speed", "CBD overall speed improvement"))
+
+        revenue_row = research_metric_row(metrics, "Revenue", "Annual net revenue (projected)")
+        revenue_actual = research_metric_number(revenue_row)
+        revenue_target = None if revenue_row is None or pd.isna(revenue_row.get("comparison_value_num")) else float(revenue_row["comparison_value_num"])
+        revenue_delta = None if revenue_actual is None or revenue_target is None else revenue_actual - revenue_target
+        revenue_months_met = 0 if revenue.empty else int(revenue["met_target"].astype(str).str.upper().eq("TRUE").sum())
+
+        air_pct = research_metric_number(research_metric_row(metrics, "Air Quality", "PM2.5 reduction in CRZ"))
+        air_abs = research_metric_number(research_metric_row(metrics, "Air Quality", "PM2.5 absolute reduction in CRZ"))
+        emissions_row = research_metric_row(metrics, "Air Quality", "Vehicular emissions reduction")
+
+        total_fewer = research_metric_number(research_metric_row(metrics, "Traffic", "Total vehicles kept out Year 1"))
+        avg_daily_reduction = research_metric_number(research_metric_row(metrics, "Traffic", "Average daily reduction"))
+        peak_window = research_metric_number(research_metric_row(metrics, "Traffic", "Morning rush hour speed improvement"))
+        weekend_speed = research_metric_number(research_metric_row(metrics, "Speed", "Weekend evening speed improvement (3-9PM)"))
+        office_attendance = research_metric_row(metrics, "Economy", "Manhattan office attendance")
+        private_emp = research_metric_row(metrics, "Economy", "Private sector employment NYC")
+
+        return {
+            "traffic_before": traffic_before,
+            "traffic_after": traffic_after,
+            "traffic_delta": traffic_delta,
+            "traffic_pct": traffic_pct,
+            "speed_before": speed_before,
+            "speed_after": speed_after,
+            "speed_delta": speed_delta,
+            "speed_pct": speed_pct,
+            "revenue_actual": revenue_actual,
+            "revenue_target": revenue_target,
+            "revenue_delta": revenue_delta,
+            "revenue_months_met": revenue_months_met,
+            "air_pct": air_pct,
+            "air_abs": air_abs,
+            "emissions_text": research_metric_display(emissions_row),
+            "total_fewer": total_fewer,
+            "avg_daily_reduction": avg_daily_reduction,
+            "peak_window": peak_window,
+            "weekend_speed": weekend_speed,
+            "office_attendance": office_attendance,
+            "private_emp": private_emp,
+        }
+
+    @render.ui
+    def overview_kpi_cards():
+        stats = overview_story_stats()
+
+        traffic_headline = "N/A" if stats["traffic_delta"] is None else f"{format_signed(stats['traffic_delta'], 0)}k/day"
+        traffic_subhead = "N/A" if stats["traffic_pct"] is None else f"{format_signed(stats['traffic_pct'], 1)}% vs 2024"
+        traffic_before = "N/A" if stats["traffic_before"] is None else f"{stats['traffic_before']:.0f}k/day"
+        traffic_after = "N/A" if stats["traffic_after"] is None else f"{stats['traffic_after']:.0f}k/day"
+        total_fewer = "N/A" if stats["total_fewer"] is None else f"{stats['total_fewer'] / 1_000_000:.0f}M"
+        avg_daily = "N/A" if stats["avg_daily_reduction"] is None else f"{format_whole_number(stats['avg_daily_reduction'])}/day"
+
+        speed_headline = "N/A" if stats["speed_delta"] is None else f"{format_signed(stats['speed_delta'], 1)} MPH"
+        speed_subhead = "N/A" if stats["speed_pct"] is None else f"+{stats['speed_pct']:.0f}% in CBD"
+        speed_before = "N/A" if stats["speed_before"] is None else f"{stats['speed_before']:.1f} MPH"
+        speed_after = "N/A" if stats["speed_after"] is None else f"{stats['speed_after']:.1f} MPH"
+        peak_window = "N/A" if stats["peak_window"] is None else f"+{stats['peak_window']:.0f}%"
+        weekend_speed = "N/A" if stats["weekend_speed"] is None else f"+{stats['weekend_speed']:.0f}%"
+
+        revenue_headline = "N/A" if stats["revenue_delta"] is None else format_compact_millions(stats["revenue_delta"])
+        if stats["revenue_delta"] is not None and stats["revenue_delta"] > 0:
+            revenue_headline = f"+{revenue_headline}"
+        revenue_subhead = "N/A" if stats["revenue_actual"] is None or stats["revenue_target"] is None else f"{format_compact_millions(stats['revenue_actual'])} vs {format_compact_millions(stats['revenue_target'])}"
+        revenue_actual = "N/A" if stats["revenue_actual"] is None else format_compact_millions(stats["revenue_actual"])
+        revenue_target = "N/A" if stats["revenue_target"] is None else format_compact_millions(stats["revenue_target"])
+        months_met = f"{stats['revenue_months_met']}/12"
+
+        air_headline = "N/A" if stats["air_pct"] is None else f"-{abs(stats['air_pct']):.0f}%"
+        air_subhead = "PM2.5 vs control period"
+        air_abs = "N/A" if stats["air_abs"] is None else f"-{abs(stats['air_abs']):.2f} ug/m3"
+
+        return ui.row(
+            make_overview_kpi_card(
+                "Traffic Volume",
+                traffic_headline,
+                traffic_subhead,
+                [
+                    ("Before", traffic_before),
+                    ("After", traffic_after),
+                    ("Vehicles kept out", total_fewer),
+                    ("Avg daily reduction", avg_daily),
+                ],
+                "",
+            ),
+            make_overview_kpi_card(
+                "CBD Speed",
+                speed_headline,
+                speed_subhead,
+                [
+                    ("Before", speed_before),
+                    ("After", speed_after),
+                    ("Morning rush", peak_window),
+                    ("Weekend evenings", weekend_speed),
+                ],
+                "kpi-b",
+            ),
+            make_overview_kpi_card(
+                "Revenue",
+                revenue_headline,
+                revenue_subhead,
+                [
+                    ("Year-one report", revenue_actual),
+                    ("Target", revenue_target),
+                    ("Months over target", months_met),
+                    ("Monthly target", "$41.6M"),
+                ],
+                "kpi-c",
+            ),
+            make_overview_kpi_card(
+                "Air Quality",
+                air_headline,
+                air_subhead,
+                [
+                    ("Absolute drop", air_abs),
+                    ("Vehicular emissions", stats["emissions_text"]),
+                    ("Noise complaints", "-45%"),
+                    ("Comparison city range", "London 7%, Stockholm 10%"),
+                ],
+                "kpi-d",
+            ),
+            class_="kpi-row",
+        )
+
+    @render.ui
+    def overview_summary():
+        stats = overview_story_stats()
+        office_row = stats["office_attendance"]
+        office_text = "Office attendance still rose from 72% to 76% of pre-pandemic levels in March 2025." if office_row is not None else "Office attendance also increased during the same period in the cloned source material."
+        traffic_text = (
+            "Traffic fell from about "
+            f"{stats['traffic_before']:.0f}k to {stats['traffic_after']:.0f}k average daily CRZ entries, "
+            f"or roughly {abs(stats['traffic_delta']):.0f}k fewer vehicles per day."
+            if stats["traffic_before"] is not None and stats["traffic_after"] is not None and stats["traffic_delta"] is not None
+            else "Traffic comparisons could not be fully computed from the pulled CSV."
+        )
+        speed_text = (
+            f"CBD speeds improved from {stats['speed_before']:.1f} to {stats['speed_after']:.1f} MPH, "
+            f"with the cloned project citing a {stats['speed_pct']:.0f}% overall gain."
+            if stats["speed_before"] is not None and stats["speed_after"] is not None and stats["speed_pct"] is not None
+            else "Speed comparisons remain available only as summary metrics from the cloned project."
+        )
+        revenue_text = (
+            f"The year-one revenue headline is {format_compact_millions(stats['revenue_actual'])} against a "
+            f"{format_compact_millions(stats['revenue_target'])} target, and the monthly series clears target "
+            f"in {stats['revenue_months_met']} of 12 months."
+            if stats["revenue_actual"] is not None and stats["revenue_target"] is not None
+            else "Revenue comparison is only partially available."
+        )
+        return make_summary_list(
+            [
+                traffic_text,
+                speed_text,
+                office_text,
+                revenue_text,
+            ]
+        )
+
+    @render.ui
+    def overview_so_what():
+        return ui.div(
+            make_summary_list(
+                [
+                    "Use this tab as the top-level synthesis after drilling into the raw bus, traffic, and subway tabs.",
+                    "The cleanest before/after evidence here is traffic volume, CBD speed, and revenue-versus-target.",
+                    "Air quality and economy remain supporting comparisons from the cloned overview CSV, not raw local course files.",
+                ]
+            ),
+            ui.div(
+                "That keeps the fourth tab focused on the cloned project's strongest comparative claims instead of turning it into a separate policy microsite.",
+                class_="so-what-note",
+            ),
+        )
+
+    @render.ui
+    def overview_funding_notes():
+        metrics = overview_bundle()["metrics"]
+        capital_row = research_metric_row(metrics, "Revenue", "Transit capital unlocked via bonds")
+        projects_row = research_metric_row(metrics, "Revenue", "Active construction projects (Jan 2026)")
+        return ui.div(
+            make_summary_list(
+                [
+                    "The cloned project keeps the HTML funding section, but here it is compressed into the same card format as the other tabs.",
+                    f"Year-one report headline: {research_metric_display(research_metric_row(metrics, 'Revenue', 'Annual net revenue (projected)'))} against a $500M target.",
+                    f"Transit capital unlocked via bonds: {research_metric_display(capital_row)}.",
+                    f"Projects already in construction as of Jan 2026: {research_metric_display(projects_row)}.",
+                ]
+            ),
+            ui.div(
+                "Revenue mix in the cloned CSV: 68% passenger vehicles, 22% taxis/FHV, 9% trucks, 1% buses and motorcycles.",
+                class_="so-what-note",
+            ),
+        )
+
+    @render.ui
+    def overview_caveats():
+        return ui.div(
+            make_summary_list(
+                [
+                    "Not every metric uses the same comparison window: some are Jan-Feb, some Jan-Jun, and some full-year 2025 versus 2024.",
+                    "The cloned repo's monthly revenue CSV sums above the HTML's $550M headline, so this tab keeps the report headline in KPIs and the pulled monthly values in the chart.",
+                    "This is a synthesis tab; if you need the course project's raw local comparisons, the other three tabs remain the primary evidence base.",
+                ]
+            ),
+        )
+
+    @render_widget
+    def overview_traffic_chart():
+        return build_research_traffic_chart(overview_bundle()["traffic"])
+
+    @render_widget
+    def overview_speed_chart():
+        return build_overview_speed_chart(overview_bundle()["metrics"])
+
+    @render_widget
+    def overview_safety_chart():
+        return build_research_safety_chart(overview_bundle()["metrics"])
+
+    @render_widget
+    def overview_air_chart():
+        return build_research_air_chart(overview_bundle()["metrics"])
+
+    @render_widget
+    def overview_revenue_chart():
+        return build_research_revenue_chart(overview_bundle()["revenue"])
+
+    @render_widget
+    def overview_economy_chart():
+        return build_research_economy_chart(overview_bundle()["metrics"])
 
     @reactive.calc
     def traffic_cutoff_month_start() -> pd.Timestamp:

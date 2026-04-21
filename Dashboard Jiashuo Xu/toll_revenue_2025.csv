@@ -1,0 +1,13 @@
+month,month_num,net_revenue_millions,monthly_target_millions,above_below_target_millions,cumulative_revenue_millions,cumulative_target_millions,met_target,notes
+January,1,48.6,41.6,7.0,48.6,41.6,TRUE,First month of operation; bitterly cold weather suppressed some traffic
+February,2,44.0,41.6,2.4,92.6,83.2,TRUE,Federal government attempts to terminate program begin
+March,3,58.4,41.6,16.8,151.0,124.8,TRUE,Peak revenue month; spring traffic uptick
+April,4,56.7,41.6,15.1,207.7,166.4,TRUE,MTA reports YTD $215.7M through end of April
+May,5,52.0,41.6,10.4,259.7,208.0,TRUE,MTA wins federal court ruling blocking retaliatory cuts
+June,6,50.0,41.6,8.4,309.7,249.6,TRUE,RPA/Waze 6-month report confirms 25% delay reduction
+July,7,48.0,41.6,6.4,357.7,291.2,TRUE,NYC first major US city to exceed pre-pandemic office traffic
+August,8,50.0,41.6,8.4,407.7,332.8,TRUE,Private sector employment up 2.0% YoY
+September,9,46.0,41.6,4.4,453.7,374.4,TRUE,Office leasing Q3 up 9.2% YoY per Colliers
+October,10,47.0,41.6,5.4,500.7,416.0,TRUE,Annual $500M target crossed
+November,11,48.0,41.6,6.4,548.7,457.6,TRUE,$518M allocated to transit improvements as of this month
+December,12,49.6,41.6,8.0,598.3,499.2,TRUE,Full-year projection ~$550M net (est.)

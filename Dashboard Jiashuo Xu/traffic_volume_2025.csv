@@ -1,0 +1,13 @@
+month,month_num,baseline_2024_daily_thousands,crz_2025_daily_thousands,daily_reduction_thousands,reduction_pct,total_monthly_vehicles_2024_millions,total_monthly_vehicles_2025_millions,vehicles_kept_out_millions
+January,1,583,510,73,12.5,18.07,15.81,2.26
+February,2,583,505,78,13.4,16.32,14.14,2.18
+March,3,583,507,76,13.0,18.07,15.72,2.36
+April,4,583,512,71,12.2,17.49,15.36,2.13
+May,5,583,516,67,11.5,18.07,15.99,2.08
+June,6,583,518,65,11.1,17.49,15.54,1.95
+July,7,583,516,67,11.5,18.07,15.99,2.08
+August,8,583,513,70,12.0,18.07,15.90,2.17
+September,9,583,510,73,12.5,17.49,15.30,2.19
+October,10,583,508,75,12.9,18.07,15.75,2.32
+November,11,583,509,74,12.7,17.49,15.27,2.22
+December,12,583,510,73,12.5,18.07,15.81,2.26

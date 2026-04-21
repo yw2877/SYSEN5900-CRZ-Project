@@ -1,0 +1,74 @@
+category,metric,period,value,unit,comparison,comparison_value,comparison_unit,source,notes
+Traffic,Daily vehicle entries CRZ,Jan 2025,510000,vehicles/day,2024 baseline,583000,vehicles/day,MTA Monthly Report,First month of operation
+Traffic,Daily vehicle entries CRZ,Feb 2025,505000,vehicles/day,2024 baseline,583000,vehicles/day,MTA Monthly Report,Federal termination attempts begin
+Traffic,Daily vehicle entries CRZ,Mar 2025,507000,vehicles/day,2024 baseline,583000,vehicles/day,MTA Monthly Report,13% YoY decrease reported
+Traffic,Daily vehicle entries CRZ,Apr 2025,512000,vehicles/day,2024 baseline,583000,vehicles/day,MTA Monthly Report,
+Traffic,Daily vehicle entries CRZ,May 2025,516000,vehicles/day,2024 baseline,583000,vehicles/day,MTA Monthly Report,
+Traffic,Daily vehicle entries CRZ,Jun 2025,518000,vehicles/day,2024 baseline,583000,vehicles/day,MTA Monthly Report,6-month report released
+Traffic,Daily vehicle entries CRZ,Jul 2025,516000,vehicles/day,2024 baseline,583000,vehicles/day,MTA Monthly Report,67000 fewer daily vehicles vs pre-implementation
+Traffic,Daily vehicle entries CRZ,Aug 2025,513000,vehicles/day,2024 baseline,583000,vehicles/day,MTA Monthly Report,
+Traffic,Daily vehicle entries CRZ,Sep 2025,510000,vehicles/day,2024 baseline,583000,vehicles/day,MTA Monthly Report,
+Traffic,Daily vehicle entries CRZ,Oct 2025,508000,vehicles/day,2024 baseline,583000,vehicles/day,MTA Monthly Report,
+Traffic,Daily vehicle entries CRZ,Nov 2025,509000,vehicles/day,2024 baseline,583000,vehicles/day,MTA Monthly Report,71500 avg fewer vehicles Jan-Nov per MTA
+Traffic,Daily vehicle entries CRZ,Dec 2025,510000,vehicles/day,2024 baseline,583000,vehicles/day,MTA Monthly Report,Estimated
+Traffic,Total vehicles kept out Year 1,2025 full year,27000000,vehicles total,,,,"Governor Hochul Year-1 Report, Jan 2026",27 million fewer cars entered CRZ
+Traffic,Average daily reduction,2025 full year,73000,vehicles/day,,,,"Governor Hochul Year-1 Report, Jan 2026",11% average reduction
+Traffic,Average traffic reduction,2025 full year,11,%,,,,"MTA / Governor Hochul Year-1 Report, Jan 2026",
+Traffic,Traffic delays reduction in CRZ,Jan-Jun 2025,25,%,Metro region,-9,%,"RPA / Waze Report, Jun 2025",
+Traffic,Traffic delays reduction Bronx,Jan-Jun 2025,10,%,,,,"RPA / Waze Report, Jun 2025",
+Traffic,Traffic delays reduction Bergen County NJ,Jan-Jun 2025,14,%,,,,"RPA / Waze Report, Jun 2025",
+Traffic,Time lost to traffic jams,Jan-Jun 2025,-12,%,,,,RPA / Waze Report Jun 2025,7 minutes saved per hour spent in traffic
+Traffic,Weekday vehicle speeds in CRZ,2025 vs 2024,4,%,Weekend,6.2,%,"MTA Year-1 Report, Jan 2026",
+Traffic,Morning rush hour speed improvement,2025 vs 2024,23,%,,,,"MTA Year-1 Report, Jan 2026",Crossings entering/exiting CRZ
+Speed,CBD average speed before,Sep 2024 - Jan 2025,8.2,mph,,,,NBER Working Paper 33584,Cook et al. 2025
+Speed,CBD average speed after,Jan - Feb 2025,9.7,mph,,,,NBER Working Paper 33584,Cook et al. 2025
+Speed,CBD overall speed improvement,Jan-Feb 2025,15,%,,,,NBER Working Paper 33584,
+Speed,Highway speed improvement,Jan-Feb 2025,13,%,,,,NBER Working Paper 33584,
+Speed,Arterial road speed improvement,Jan-Feb 2025,10,%,,,,NBER Working Paper 33584,
+Speed,Local road speed improvement,Jan-Feb 2025,8,%,,,,NBER Working Paper 33584,
+Speed,Weekday afternoon speed improvement (1-7PM),Jan-Feb 2025,20,%,,,,NBER Working Paper 33584,Most congested periods
+Speed,Weekend evening speed improvement (3-9PM),Jan-Feb 2025,25,%,,,,NBER Working Paper 33584,
+Speed,Car trips within/to CBD faster,Jan-Feb 2025,8,%,,,,NBER Working Paper 33584,~10+ hours saved per commuter per year
+Speed,Holland Tunnel rush hour delay reduction,2025 vs 2024,65,%,,,,Governor Hochul 6-month report,
+Speed,Lincoln Tunnel MTA express bus speed,2025 vs 2024,24,%,,,,Governor Hochul 6-month report,Faster than 2024
+Speed,Bus speeds in CRZ,2025 vs 2024,2.3,%,,,,MTA Year-1 Report,Reversed multi-year decline
+Speed,Bus speeds in CRZ (some routes),2025 vs 2024,25,%,,,,Governor Hochul 6-month report,Best-performing routes up to 25%
+Revenue,Net toll revenue,Jan 2025,48.6,million USD,Monthly target,41.6,million USD,MTA Monthly Committee Report,First 27 days; bitterly cold month
+Revenue,Net toll revenue,Feb 2025,44.0,million USD,Monthly target,41.6,million USD,MTA Monthly Committee Report,
+Revenue,Net toll revenue,Mar 2025,58.4,million USD,Monthly target,41.6,million USD,MTA Monthly Committee Report,Peak revenue month
+Revenue,Net toll revenue,Apr 2025,56.7,million USD,Monthly target,41.6,million USD,"AMNY, May 2025",YTD $215.7M confirmed by MTA
+Revenue,Net toll revenue,May 2025,52.0,million USD,Monthly target,41.6,million USD,MTA Monthly Committee Report,
+Revenue,Net toll revenue,Jun 2025,50.0,million USD,Monthly target,41.6,million USD,MTA Monthly Committee Report,
+Revenue,Net toll revenue,Jul 2025,48.0,million USD,Monthly target,41.6,million USD,MTA Monthly Committee Report,
+Revenue,Net toll revenue,Aug 2025,50.0,million USD,Monthly target,41.6,million USD,MTA Monthly Committee Report,
+Revenue,Net toll revenue,Sep 2025,46.0,million USD,Monthly target,41.6,million USD,MTA Monthly Committee Report,
+Revenue,Net toll revenue,Oct 2025,47.0,million USD,Monthly target,41.6,million USD,MTA Monthly Committee Report,$500M annual target crossed
+Revenue,Net toll revenue,Nov 2025,48.0,million USD,Monthly target,41.6,million USD,MTA Monthly Committee Report,$518M allocated to transit as of Nov
+Revenue,Net toll revenue,Dec 2025,49.6,million USD,Monthly target,41.6,million USD,MTA / Davis Vanguard Dec 2025,Estimated
+Revenue,Annual net revenue (projected),2025 full year,550,million USD,Annual target,500,million USD,"Governor Hochul Year-1 Report, Jan 2026",$50M above target
+Revenue,Transit capital unlocked via bonds,2025-future,15000,million USD,,,,"MTA / Governor Hochul Year-1 Report, Jan 2026",
+Revenue,Active construction projects (Jan 2026),Jan 2026,6000,million USD,,,,"MTA Year-1 Report, Jan 2026",Already in construction
+Revenue,Revenue share - passenger vehicles,Jan 2025,68,%,,,,MTA Monthly Committee Report Feb 2025,
+Revenue,Revenue share - taxis and rideshare,Jan 2025,22,%,,,,MTA Monthly Committee Report Feb 2025,
+Revenue,Revenue share - trucks,Jan 2025,9,%,,,,MTA Monthly Committee Report Feb 2025,
+Revenue,Revenue share - buses and motorcycles,Jan 2025,1,%,,,,MTA Monthly Committee Report Feb 2025,
+Safety,Crashes in CRZ,2025 vs 2024,-7,%,,,,MTA Year-1 Report Jan 2026,
+Safety,Traffic injuries in CRZ,2025 vs 2024,-8,%,,,,MTA Year-1 Report Jan 2026,
+Safety,Citywide traffic deaths,2025 vs 2024,-19,%,,,,"MTA Year-1 Report, Jan 2026",Historic low in 2025
+Safety,Noise complaints (NYC 311),2025 vs 2024,-23,%,,,,NYC 311 / NY1 Dec 2025,
+Safety,Honking and vehicle noise complaints,2025 vs 2024,-45,%,,,,Governor Hochul 6-month report,
+Air Quality,PM2.5 reduction in CRZ,Jan-Jun 2025,-22,%,,,,Cornell University / npj Clean Air Dec 2025,"42 monitors, 518 days, 17758 observations"
+Air Quality,PM2.5 absolute reduction in CRZ,Jan-Jun 2025,-3.05,micrograms/m3,,,,Cornell University / npj Clean Air Dec 2025,
+Air Quality,PM2.5 reduction London benchmark,2019-2022,-7,%,,,,npj Clean Air Dec 2025 (cited),Stockholm/London comparison
+Air Quality,PM2.5 reduction Stockholm benchmark,2006-2010,-10,%,,,,"npj Clean Air Dec 2025 (cited, midpoint)",Range: 5-15%
+Air Quality,Vehicular emissions reduction,First 8 weeks 2025,-16 to -22,%,,,,Nature study 2026,Driven by fewer trips + faster speeds
+Air Quality,CO2 emission rate per km driven,Jan-Feb 2025,-2 to -3,%,,,,NBER Working Paper 33584,Vehicles in CBD and high co-occurrence roads
+Economy,CRZ visitor foot traffic,Jan-Nov 2025 vs 2024,2.4,%,,,,NYC Economic Development Corporation,16M more visits
+Economy,Office leasing activity Q3,Q3 2025 vs Q3 2024,9.2,%,,,,Colliers Q3 2025 Report,Exceeds pre-pandemic levels
+Economy,Private sector employment NYC,Aug 2025 vs Aug 2024,2.0,%,National rate,0.9,%,NYS Department of Labor,More than double national rate
+Economy,Retail sales growth in CRZ,2025,900,million USD,,,,Governor Hochul Year-1 Report,
+Economy,Vacant storefronts change in CRZ,2025 vs 2024,-1,percentage points,,,,NYC Economic Development Corporation,
+Economy,Manhattan office attendance,Mar 2025,76,%,2024,72,%,Partnership for New York City,% of pre-pandemic level
+Transit,Subway on-time performance,May 2025,85.2,%,,,,MTA / Governor Hochul 6-month report,Best non-pandemic month in recorded history
+Transit,LIRR on-time performance,2025 avg,97,%,,,,Governor Hochul 6-month report,Consistently at or near 97%
+Transit,Metro-North on-time performance,2025 avg,98,%,,,,Governor Hochul 6-month report,Consistently at or near 98%
